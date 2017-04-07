@@ -43,24 +43,27 @@ init.weights <- function(layers, seed = 0) {
 #     list(w = weights, r = rewards)
 # }
 
-layers <- c(4, 8, 1)
-idx <- sample(nrow(iris), 20)
-input <- scale(iris[idx, -5])
-labels <- iris[idx, 5] == 'setosa'
+layers <- c(4, 8, 3)
+input <- scale(iris[-5])
+labels <- as.matrix(iris[5] == 'setosa')
+labels <- cbind(labels, iris[5] == 'virginica')
+labels <- cbind(labels, iris[5] == 'versicolor')
+model <- train(layers, input, labels, n.iter = 1e3, alpha = 1e-2)
 
 train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0) {
    weights <- init.weights(layers, seed)
-   curve <- rep(NA, n.iter)
-   accuracy <- rep(NA, n.iter)
+   #curve <- rep(NA, n.iter)
+   #accuracy <- rep(NA, n.iter)
    for (i in 1:n.iter) {
       neurons <- forward.propagation(input, weights)
       last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
-      curve[i] <- last.deltas$l
-      accuracy[i] <- mean(round(last.deltas$h) == labels)
+      #curve[i] <- last.deltas$l
+      #accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
       deltas <- backpropagation(neurons, weights, last.deltas$d)
       weights <- update.weights(neurons, weights, deltas, alpha)
    }
-   list(w = weights, c = curve, a = accuracy)
+   weights
+   #list(w = weights, c = curve, a = accuracy)
 }
 
 test <- function(input, weights, labels) {
@@ -82,22 +85,21 @@ forward.propagation <- function(input, weights) {
    neurons
 }
 
-# activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] <- 0.
+activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] <- 0.
 
-# gradient <- function(z) ifelse(z > 0, 1, 0)
+gradient <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
 
-activation <- function(z) 1 / (1 + exp(-z))
+#activation <- function(z) 1 / (1 + exp(-z))
 
-gradient <- function(z) { s <- activation(z); s * (1 - s) }
+#gradient <- function(z) { s <- activation(z); s * (1 - s) }
 
 last.layer <- function(neurons, labels) {
    # Compute both last layer activations AND loss. It must return its deltas.
-   # hypothesis <- activation(neurons$z[[length(neurons$z)]])
    # hypothesis <- neurons$z[[length(neurons$z)]] # Linear activation.
    # loss <- mean((hypothesis - labels)^2) / 2 # Regression loss.
    hypothesis <- 1 / (1 + exp(-neurons$z[[length(neurons$z)]])) # Sigmoid activation.
-   loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Logistic loss.
-   list(h = hypothesis, l = loss, d = hypothesis - labels)
+   #loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Logistic loss.
+   list(h = hypothesis, d = hypothesis - labels)#, l = loss)
 }
 
 # play <- function(train.set, idx, neurons, n.bars) {
