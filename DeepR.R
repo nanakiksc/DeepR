@@ -50,20 +50,44 @@ labels <- cbind(labels, iris[5] == 'virginica')
 labels <- cbind(labels, iris[5] == 'versicolor')
 model <- train(layers, input, labels, n.iter = 1e3, alpha = 1e-2)
 
-train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0) {
+train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0, neuron.type = 'ReLU', diagnostics = FALSE) {
    weights <- init.weights(layers, seed)
-   #curve <- rep(NA, n.iter)
-   #accuracy <- rep(NA, n.iter)
-   for (i in 1:n.iter) {
-      neurons <- forward.propagation(input, weights)
-      last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
-      #curve[i] <- last.deltas$l
-      #accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
-      deltas <- backpropagation(neurons, weights, last.deltas$d)
-      weights <- update.weights(neurons, weights, deltas, alpha)
+   
+   if (neuron.type == 'ReLU') {
+      activation <<- function(z) (abs(z) + z) / 2
+      gradient <<- function(z) z > 0
+   } else if (neuron.type == 'sigmoid') {
+      activation <<- function(z) 1 / (1 + exp(-z))
+      gradient <<- function(z) { s <- activation(z); s * (1 - s) }
+   } else if (neuron.type == 'tanh') {
+      activation <<- function(z) tanh(z)
+      gradient <<- function(z) 1 - tanh(z)^2
+   } else {
+      print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
+      stop()
    }
-   weights
-   #list(w = weights, c = curve, a = accuracy)
+   
+   if (diagnostics) {
+      curve <- rep(NA, n.iter)
+      accuracy <- rep(NA, n.iter)
+      for (i in 1:n.iter) {
+         neurons <- forward.propagation(input, weights)
+         last.deltas <- last.layer.diagnostics(neurons, labels) # Hypothesis and Deltas.
+         curve[i] <- last.deltas$l
+         accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
+         deltas <- backpropagation(neurons, weights, last.deltas$d)
+         weights <- update.weights(neurons, weights, deltas, alpha)
+      }
+      list(w = weights, c = curve, a = accuracy)
+   } else {
+      for (i in 1:n.iter) {
+         neurons <- forward.propagation(input, weights)
+         last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
+         deltas <- backpropagation(neurons, weights, last.deltas$d)
+         weights <- update.weights(neurons, weights, deltas, alpha)
+      }
+      weights
+   }
 }
 
 test <- function(input, weights, labels) {
@@ -89,17 +113,20 @@ activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] 
 
 gradient <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
 
-#activation <- function(z) 1 / (1 + exp(-z))
-
-#gradient <- function(z) { s <- activation(z); s * (1 - s) }
-
 last.layer <- function(neurons, labels) {
+   # Compute both last layer activations AND loss. It must return its deltas.
+   # hypothesis <- neurons$z[[length(neurons$z)]] # Linear activation.
+   hypothesis <- 1 / (1 + exp(-neurons$z[[length(neurons$z)]])) # Sigmoid activation.
+   list(h = hypothesis, d = hypothesis - labels)
+}
+
+last.layer.diagnostics <- function(neurons, labels) {
    # Compute both last layer activations AND loss. It must return its deltas.
    # hypothesis <- neurons$z[[length(neurons$z)]] # Linear activation.
    # loss <- mean((hypothesis - labels)^2) / 2 # Regression loss.
    hypothesis <- 1 / (1 + exp(-neurons$z[[length(neurons$z)]])) # Sigmoid activation.
-   #loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Logistic loss.
-   list(h = hypothesis, d = hypothesis - labels)#, l = loss)
+   loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Logistic loss.
+   list(h = hypothesis, d = hypothesis - labels, l = loss)
 }
 
 # play <- function(train.set, idx, neurons, n.bars) {
