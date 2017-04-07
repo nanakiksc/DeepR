@@ -3,45 +3,11 @@
 ##########################################
 
 # TODO: apply L2 regularization.
-# TODO: set initial learning rate alpha and annealing schedule.
-# TODO: maybe try zero initialization on the bias weights.
-# TODO: do not regularize bias terms. Maybe remove bias neurons altogether and keep a separate, unregularized, biases matrix.
+# TODO: implement annealing schedule.
+# DONE (TEST): maybe try zero initialization on the bias weights.
+# TODO: do not regularize bias terms.
+# DONE (TEST): Maybe remove bias neurons altogether and keep a separate, unregularized, biases matrix.
 # TODO: apply dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
-
-init.weights <- function(layers, seed = 0) {
-    set.seed(seed)
-    weights <- list()
-    for (i in 1:(length(layers) - 1)) {
-        nrow <- layers[i] + 1 # +1 connection from the bias unit.
-        ncol <- layers[i + 1]
-        weights[[i]] <- matrix(rnorm(nrow * ncol) * sqrt(2 / nrow),
-                               nrow = nrow, ncol = ncol)
-    }
-    weights
-}
-
-# train <- function(train.set, raw.train.set, weights, n.bars, n.iter = 1000, alpha = 1) {
-#     set.seed(0)
-#     idx <- c()
-#     # Do not include the first n.bars examples from the training set.
-#     for (i in 1:ceiling(n.iter / (nrow(train.set) - n.bars))) {
-#         idx <- c(idx, sample(nrow(train.set) - n.bars) + n.bars)
-#     }
-#     idx <- idx[1:n.iter]
-#     rewards <- rep(NA, n.iter)
-#     for (i in 1:n.iter) {
-#         input <- matrix(train.set[(idx[i] - n.bars + 1):idx[i], ], nrow = 1)
-#         neurons <- forward.propagation(input, weights)
-#         # Computes last layer activations AND loss.
-#         last.deltas <- last.layer(neurons, labels)
-#         deltas <- backpropagation(neurons, weights, last.deltas)
-#         # Compute reward from external environment.
-#         #rewards[i] <- play(raw.train.set, idx[i], neurons, n.bars)
-#         #deltas <- backpropagation(neurons, weights, rewards[i])
-#         weights <- update.weights(neurons, weights, deltas, alpha)
-#     }
-#     list(w = weights, r = rewards)
-# }
 
 layers <- c(4, 8, 3)
 input <- scale(iris[-5])
@@ -50,8 +16,22 @@ labels <- cbind(labels, iris[5] == 'virginica')
 labels <- cbind(labels, iris[5] == 'versicolor')
 model <- train(layers, input, labels, n.iter = 1e3, alpha = 1e-2)
 
+init.model <- function(layers, seed = 0) {
+    set.seed(seed)
+    model <- list(weights = list(), biases = list())
+    for (i in 1:(length(layers) - 1)) {
+        nrow <- layers[i]# + 1 # +1 connection from the bias unit.
+        ncol <- layers[i + 1]
+        model$weights[[i]] <- matrix(rnorm(nrow * ncol) * sqrt(2 / nrow),
+                                     nrow = nrow, ncol = ncol)
+        model$biases[[i]] <- matrix(0, nrow = nrow)
+    }
+    model$biases[[length(layers)]] <- matrix(0, nrow = layers[length(layers)])
+    model
+}
+
 train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0, neuron.type = 'ReLU', diagnostics = FALSE) {
-   weights <- init.weights(layers, seed)
+   model <- init.model(layers, seed)
    
    if (neuron.type == 'ReLU') {
       activation <<- function(z) (abs(z) + z) / 2
@@ -71,41 +51,43 @@ train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0, ne
       curve <- rep(NA, n.iter)
       accuracy <- rep(NA, n.iter)
       for (i in 1:n.iter) {
-         neurons <- forward.propagation(input, weights)
+         neurons <- forward.propagation(input, model)
          last.deltas <- last.layer.diagnostics(neurons, labels) # Hypothesis and Deltas.
          curve[i] <- last.deltas$l
          accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
-         deltas <- backpropagation(neurons, weights, last.deltas$d)
-         weights <- update.weights(neurons, weights, deltas, alpha)
+         deltas <- backpropagation(neurons, model, last.deltas$d)
+         model <- update.weights(neurons, model, deltas, alpha)
       }
-      list(w = weights, c = curve, a = accuracy)
+      list(model = model, c = curve, a = accuracy)
    } else {
       for (i in 1:n.iter) {
-         neurons <- forward.propagation(input, weights)
+         neurons <- forward.propagation(input, model)
          last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
-         deltas <- backpropagation(neurons, weights, last.deltas$d)
-         weights <- update.weights(neurons, weights, deltas, alpha)
+         deltas <- backpropagation(neurons, model, last.deltas$d)
+         model <- update.weights(neurons, model, deltas, alpha)
       }
-      weights
+      model
    }
 }
 
-test <- function(input, weights, labels) {
-   neurons <- forward.propagation(input, weights)
+test <- function(input, model, labels) {
+   neurons <- forward.propagation(input, model)
    last.layer(neurons, labels)$h
 }
 
-forward.propagation <- function(input, weights) {
+forward.propagation <- function(input, model) {
    # TODO: maybe avoid creating a list at every iteration.
    neurons <- list(a = list(input))
-   n.weights <- length(weights)
+   n.weights <- length(model$weights)
    if (n.weights > 1) {
       for (i in 1:(n.weights - 1)) {
-         neurons$z[[i + 1]] <- cbind(1, neurons$a[[i]]) %*% weights[[i]] # Add bias unit.
+         # neurons$z[[i + 1]] <- cbind(1, neurons$a[[i]]) %*% weights[[i]] # Add bias unit.
+         neurons$z[[i + 1]] <- neurons$a[[i]] %*% model$weights[[i]] + model$biases
          neurons$a[[i + 1]] <- activation(neurons$z[[i + 1]])
       }
    }
-   neurons$z[[n.weights + 1]] <- cbind(1, neurons$a[[n.weights]]) %*% weights[[n.weights]] # Add bias unit.
+   # neurons$z[[n.weights + 1]] <- cbind(1, neurons$a[[n.weights]]) %*% weights[[n.weights]] # Add bias unit.
+   neurons$z[[n.weights + 1]] <- neurons$a[[i]] %*% model$weights[[i]] + model$biases
    neurons
 }
 
@@ -129,6 +111,39 @@ last.layer.diagnostics <- function(neurons, labels) {
    list(h = hypothesis, d = hypothesis - labels, l = loss)
 }
 
+backpropagation <- function(neurons, model, last.deltas) {
+    # n.layers <- length(model$weights) + 1
+    n.layers <- length(model$weights)
+    deltas <- list()
+    deltas[[n.layers]] <- last.deltas
+    if (n.layers == 2) return(deltas)
+    for (i in (n.layers - 1):2) {
+        # deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(weights[[i]][-1, ])) * gradient(neurons$z[[i]])
+       deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
+    }
+    deltas
+}
+
+update.weights <- function(neurons, weights, deltas, alpha = 1) {
+    for (i in 1:length(weights)) {
+        # Update weights with a MINUS as this is a MINIMIZATION problem. Add bias unit.
+        # weights[[i]] <- weights[[i]] - alpha * t(cbind(1, neurons$a[[i]])) %*% deltas[[i + 1]]
+        update <- alpha * t(neurons$a[[i]]) %*% deltas[[i + 1]]
+        model$weights[[i]] <- model$weights[[i]] - update
+        model$biases[[i]] <- model$biases[[i]] - update
+    }
+    # weights
+    model
+}
+
+#     idx <- c()
+#     # Do not include the first n.bars examples from the training set.
+#     for (i in 1:ceiling(n.iter / (nrow(train.set) - n.bars))) {
+#         idx <- c(idx, sample(nrow(train.set) - n.bars) + n.bars)
+#     }
+#     idx <- idx[1:n.iter]
+#     for (i in 1:n.iter) input <- matrix(train.set[(idx[i] - n.bars + 1):idx[i], ], nrow = 1)
+
 # play <- function(train.set, idx, neurons, n.bars) {
 #     # Use tanh activation for the B/S signal and linear activation for setting the limit.
 #     output <- neurons$z[[length(neurons$z)]]
@@ -150,22 +165,3 @@ last.layer.diagnostics <- function(neurons, labels) {
 #     }
 #     reward * sign(tanh(output[1]))
 # }
-
-backpropagation <- function(neurons, weights, last.deltas) {
-    n.layers <- length(weights) + 1
-    deltas <- list()
-    deltas[[n.layers]] <- last.deltas
-    if (n.layers == 2) return(deltas)
-    for (i in (n.layers - 1):2) {
-        deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(weights[[i]][-1, ])) * gradient(neurons$z[[i]])
-    }
-    deltas
-}
-
-update.weights <- function(neurons, weights, deltas, alpha = 1) {
-    for (i in 1:length(weights)) {
-        # Update weights with a MINUS as this is a MINIMIZATION problem. Add bias unit.
-        weights[[i]] <- weights[[i]] - alpha * t(cbind(1, neurons$a[[i]])) %*% deltas[[i + 1]]
-    }
-    weights
-}
