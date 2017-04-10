@@ -18,13 +18,12 @@ init.model <- function(layers, seed = 0) {
     set.seed(seed)
     model <- list(weights = list(), biases = list())
     for (i in 1:(length(layers) - 1)) {
-        nrow <- layers[i]# + 1 # +1 connection from the bias unit.
+        nrow <- layers[i]
         ncol <- layers[i + 1]
         model$weights[[i]] <- matrix(rnorm(nrow * ncol) * sqrt(2 / nrow),
                                      nrow = nrow, ncol = ncol)
         model$biases[[i]] <- rep(0, ncol)
     }
-    #model$biases[[length(layers)]] <- matrix(0, nrow = layers[length(layers)])
     model
 }
 
@@ -79,14 +78,10 @@ forward.propagation <- function(input, model) {
    n.weights <- length(model$weights)
    if (n.weights > 1) {
       for (i in 2:n.weights) {
-         # neurons$z[[i + 1]] <- cbind(1, neurons$a[[i]]) %*% weights[[i]] # Add bias unit.
-         # neurons$z[[i + 1]] <- neurons$a[[i]] %*% model$weights[[i]] + model$biases[[i + 1]]
          neurons$z[[i]] <- sweep(neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
          neurons$a[[i]] <- activation(neurons$z[[i]])
       }
    }
-   # neurons$z[[n.weights + 1]] <- cbind(1, neurons$a[[n.weights]]) %*% weights[[n.weights]] # Add bias unit.
-   # neurons$z[[n.weights + 1]] <- neurons$a[[i]] %*% model$weights[[i]] + model$biases
    neurons$z[[n.weights + 1]] <- sweep(neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
    neurons
 }
@@ -117,7 +112,6 @@ backpropagation <- function(neurons, model, last.deltas) {
     deltas[[n.layers]] <- last.deltas
     if (n.layers == 2) return(deltas)
     for (i in (n.layers - 1):2) {
-        # deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(weights[[i]][-1, ])) * gradient(neurons$z[[i]])
        deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
     }
     deltas
@@ -125,13 +119,10 @@ backpropagation <- function(neurons, model, last.deltas) {
 
 update.model <- function(neurons, model, deltas, alpha = 1) {
     for (i in 1:length(model$weights)) {
-        # Update weights with a MINUS as this is a MINIMIZATION problem. Add bias unit.
-        # weights[[i]] <- weights[[i]] - alpha * t(cbind(1, neurons$a[[i]])) %*% deltas[[i + 1]]
-        update <- t(neurons$a[[i]]) %*% deltas[[i + 1]]
-        model$weights[[i]] <- model$weights[[i]] - alpha * t(neurons$a[[i]]) %*% deltas[[i + 1]] # + regularization term.
+        # Update weights with a MINUS as this is a MINIMIZATION problem.
+        model$weights[[i]] <- model$weights[[i]] - alpha * t(neurons$a[[i]]) %*% deltas[[i + 1]] # TODO: + regularization term.
         model$biases[[i]] <- model$biases[[i]] - alpha * colSums(deltas[[i + 1]])
     }
-    # weights
     model
 }
 
