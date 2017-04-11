@@ -2,32 +2,27 @@
 ## DeepR: Deep Learning Framework for R ##
 ##########################################
 
-# TODO: apply L2 regularization.
+# TODO: apply L2 regularization, do not regularize bias terms.
 # TODO: implement annealing schedule.
-# DONE (TEST): maybe try zero initialization on the bias weights.
-# TODO: do not regularize bias terms.
-# DONE (TEST): Maybe remove bias neurons altogether and keep a separate, unregularized, biases matrix.
-# TODO: apply dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
+# TODO: try dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
+# TODO: add momentum?
 
-layers <- c(4, 8, 3)
-input <- scale(iris[-5])
-labels <- matrix(c(iris[5] == 'setosa', iris[5] == 'virginica', iris[5] == 'versicolor'), ncol = 3)
-model <- train(layers, input, labels, n.iter = 1e3, alpha = 1e-3)
-
-init.model <- function(layers, seed = 0) {
-    set.seed(seed)
+init.model <- function(layers, seed = NULL) {
+    if (!is.null(seed)) set.seed(seed)
     model <- list(weights = list(), biases = list())
     for (i in 1:(length(layers) - 1)) {
         nrow <- layers[i]
         ncol <- layers[i + 1]
-        model$weights[[i]] <- matrix(rnorm(nrow * ncol) * sqrt(2 / nrow),
-                                     nrow = nrow, ncol = ncol)
+        model$weights[[i]] <- matrix(rnorm(nrow * ncol), nrow = nrow, ncol = ncol)
+        # model$weights[[i]] <- model$weights[[i]] * sqrt(2 / (nrow + ncol)), # Xavier initializarion for deep networks.
+        # model$weights[[i]] <- model$weights[[i]] * sqrt(nrow), # Caffe version of Xavier initialization.
+        model$weights[[i]] <- model$weights[[i]] * sqrt(2 / nrow) # He et al. adjusted initialization for deep ReLU networks.
         model$biases[[i]] <- rep(0, ncol)
     }
     model
 }
 
-train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0, neuron.type = 'ReLU', diagnostics = FALSE) {
+train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, seed = NULL, neuron.type = 'ReLU', diagnostics = FALSE) {
    model <- init.model(layers, seed)
    
    if (neuron.type == 'ReLU') {
@@ -44,32 +39,36 @@ train <- function(layers, input, labels, n.iter = 1e3, alpha = 1e0, seed = 0, ne
       stop()
    }
    
-   if (diagnostics) {
-      curve <- rep(NA, n.iter)
-      accuracy <- rep(NA, n.iter)
-      for (i in 1:n.iter) {
-         neurons <- forward.propagation(input, model)
-         last.deltas <- last.layer.diagnostics(neurons, labels) # Hypothesis and Deltas.
-         curve[i] <- last.deltas$l
-         accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
-         deltas <- backpropagation(neurons, model, last.deltas$d)
-         model <- update.model(neurons, model, deltas, alpha)
-      }
-      list(model = model, c = curve, a = accuracy)
-   } else {
+   # if (diagnostics) { # TODO: remove this. Implement a sampling schedule (train() without diagnostics + test() every now and then).
+   #    curve <- rep(NA, n.iter)
+   #    accuracy <- rep(NA, n.iter)
+   #    for (i in 1:n.iter) {
+   #       neurons <- forward.propagation(input, model)
+   #       last.deltas <- last.layer.diagnostics(neurons, labels, model, lambda) # Hypothesis and Deltas.
+   #       curve[i] <- last.deltas$l
+   #       accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
+   #       deltas <- backpropagation(neurons, model, last.deltas$d)
+   #       model <- update.model(neurons, model, deltas, alpha, lambda)
+   #    }
+   #    list(model = model, c = curve, a = accuracy)
+   # } else {
       for (i in 1:n.iter) {
          neurons <- forward.propagation(input, model)
          last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
          deltas <- backpropagation(neurons, model, last.deltas$d)
-         model <- update.model(neurons, model, deltas, alpha)
+         model <- update.model(neurons, model, deltas, alpha, lambda)
       }
       model
-   }
+   # }
 }
 
-test <- function(input, model, labels) {
+test <- function(input, model, labels, lambda = 0) {
    neurons <- forward.propagation(input, model)
-   last.layer(neurons, labels)$h
+   hypothesis <- last.layer(neurons, labels)$h
+   # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
+   loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
+   loss <- loss + lambda * sum(unlist(model$weights)^2) / (2 * nrow(neurons$z[[length(neurons$z)]])) # Add L2 regularization term.
+   list(h = hypothesis, l = loss)
 }
 
 forward.propagation <- function(input, model) {
@@ -91,19 +90,10 @@ activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] 
 gradient <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
 
 last.layer <- function(neurons, labels) {
-   # Compute both last layer activations AND loss. It must return its deltas.
+   # Compute last layer activations (hypothesis). It must return its deltas.
    # hypothesis <- neurons$z[[length(neurons$z)]] # Linear activation.
    hypothesis <- 1 / (1 + exp(-neurons$z[[length(neurons$z)]])) # Sigmoid activation.
    list(h = hypothesis, d = hypothesis - labels)
-}
-
-last.layer.diagnostics <- function(neurons, labels) {
-   # Compute both last layer activations AND loss. It must return its deltas.
-   # hypothesis <- neurons$z[[length(neurons$z)]] # Linear activation.
-   # loss <- mean((hypothesis - labels)^2) / 2 # Regression loss.
-   hypothesis <- 1 / (1 + exp(-neurons$z[[length(neurons$z)]])) # Sigmoid activation.
-   loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Logistic loss.
-   list(h = hypothesis, d = hypothesis - labels, l = loss)
 }
 
 backpropagation <- function(neurons, model, last.deltas) {
@@ -117,10 +107,11 @@ backpropagation <- function(neurons, model, last.deltas) {
     deltas
 }
 
-update.model <- function(neurons, model, deltas, alpha = 1) {
+update.model <- function(neurons, model, deltas, alpha = 1, lambda = 0) {
     for (i in 1:length(model$weights)) {
-        # Update weights with a MINUS as this is a MINIMIZATION problem.
-        model$weights[[i]] <- model$weights[[i]] - alpha * t(neurons$a[[i]]) %*% deltas[[i + 1]] # TODO: + regularization term.
+        # Update weights with a MINUS as this is a MINIMIZATION problem. Add L2 regularization term.
+        # model$weights[[i]] <- model$weights[[i]] - alpha * t(neurons$a[[i]]) %*% deltas[[i + 1]]
+        model$weights[[i]] <- model$weights[[i]] - alpha * (t(neurons$a[[i]]) %*% deltas[[i + 1]] + lambda * model$weights[[i]])
         model$biases[[i]] <- model$biases[[i]] - alpha * colSums(deltas[[i + 1]])
     }
     model
