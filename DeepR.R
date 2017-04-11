@@ -2,8 +2,7 @@
 ## DeepR: Deep Learning Framework for R ##
 ##########################################
 
-# TODO: apply L2 regularization, do not regularize bias terms.
-# TODO: implement annealing schedule.
+# TODO: implement annealing schedule to the learning rate alpha.
 # TODO: try dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
 # TODO: add momentum?
 
@@ -23,43 +22,29 @@ init.model <- function(layers, seed = NULL) {
 }
 
 train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, seed = NULL, neuron.type = 'ReLU', diagnostics = FALSE) {
-   model <- init.model(layers, seed)
+    model <- init.model(layers, seed)
    
-   if (neuron.type == 'ReLU') {
-      activation <<- function(z) (abs(z) + z) / 2
-      gradient <<- function(z) z > 0
-   } else if (neuron.type == 'sigmoid') {
-      activation <<- function(z) 1 / (1 + exp(-z))
-      gradient <<- function(z) { s <- activation(z); s * (1 - s) }
-   } else if (neuron.type == 'tanh') {
-      activation <<- function(z) tanh(z)
-      gradient <<- function(z) 1 - tanh(z)^2
-   } else {
-      print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
-      stop()
-   }
+    if (neuron.type == 'ReLU') {
+        activation <<- function(z) (abs(z) + z) / 2
+        gradient <<- function(z) z > 0
+    } else if (neuron.type == 'sigmoid') {
+        activation <<- function(z) 1 / (1 + exp(-z))
+        gradient <<- function(z) { s <- activation(z); s * (1 - s) }
+    } else if (neuron.type == 'tanh') {
+        activation <<- function(z) tanh(z)
+        gradient <<- function(z) 1 - tanh(z)^2
+    } else {
+        print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
+        stop()
+    }
    
-   # if (diagnostics) { # TODO: remove this. Implement a sampling schedule (train() without diagnostics + test() every now and then).
-   #    curve <- rep(NA, n.iter)
-   #    accuracy <- rep(NA, n.iter)
-   #    for (i in 1:n.iter) {
-   #       neurons <- forward.propagation(input, model)
-   #       last.deltas <- last.layer.diagnostics(neurons, labels, model, lambda) # Hypothesis and Deltas.
-   #       curve[i] <- last.deltas$l
-   #       accuracy[i] <- mean(apply(round(last.deltas$h) == labels, 1, all))
-   #       deltas <- backpropagation(neurons, model, last.deltas$d)
-   #       model <- update.model(neurons, model, deltas, alpha, lambda)
-   #    }
-   #    list(model = model, c = curve, a = accuracy)
-   # } else {
-      for (i in 1:n.iter) {
+    for (i in 1:n.iter) {
          neurons <- forward.propagation(input, model)
          last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
          deltas <- backpropagation(neurons, model, last.deltas$d)
          model <- update.model(neurons, model, deltas, alpha, lambda)
       }
       model
-   # }
 }
 
 test <- function(input, model, labels, lambda = 0) {
@@ -68,7 +53,8 @@ test <- function(input, model, labels, lambda = 0) {
    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
    loss <- loss + lambda * sum(unlist(model$weights)^2) / (2 * nrow(neurons$z[[length(neurons$z)]])) # Add L2 regularization term.
-   list(h = hypothesis, l = loss)
+   accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
+   list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
 
 forward.propagation <- function(input, model) {
@@ -110,7 +96,6 @@ backpropagation <- function(neurons, model, last.deltas) {
 update.model <- function(neurons, model, deltas, alpha = 1, lambda = 0) {
     for (i in 1:length(model$weights)) {
         # Update weights with a MINUS as this is a MINIMIZATION problem. Add L2 regularization term.
-        # model$weights[[i]] <- model$weights[[i]] - alpha * t(neurons$a[[i]]) %*% deltas[[i + 1]]
         model$weights[[i]] <- model$weights[[i]] - alpha * (t(neurons$a[[i]]) %*% deltas[[i + 1]] + lambda * model$weights[[i]])
         model$biases[[i]] <- model$biases[[i]] - alpha * colSums(deltas[[i + 1]])
     }
