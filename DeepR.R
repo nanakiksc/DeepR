@@ -1,7 +1,3 @@
-##########################################
-## DeepR: Deep Learning Framework for R ##
-##########################################
-
 # TODO: implement annealing schedule to the learning rate alpha.
 # TODO: try dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
 # TODO: add momentum?
@@ -23,7 +19,7 @@ init.model <- function(layers, seed = NULL) {
 
 train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, seed = NULL, neuron.type = 'ReLU', diagnostics = FALSE) {
     model <- init.model(layers, seed)
-   
+
     if (neuron.type == 'ReLU') {
         activation <<- function(z) (abs(z) + z) / 2
         gradient <<- function(z) z > 0
@@ -37,7 +33,7 @@ train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, se
         print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
         stop()
     }
-   
+
     for (i in 1:n.iter) {
          neurons <- forward.propagation(input, model)
          last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
@@ -47,7 +43,7 @@ train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, se
       model
 }
 
-test <- function(input, model, labels, lambda = 0) {
+test <- function(model, input, labels, lambda = 0) {
    neurons <- forward.propagation(input, model)
    hypothesis <- last.layer(neurons, labels)$h
    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
