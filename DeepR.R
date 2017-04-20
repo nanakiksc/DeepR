@@ -97,33 +97,3 @@ update.model <- function(neurons, model, deltas, alpha = 1, lambda = 0) {
     }
     model
 }
-
-#     idx <- c()
-#     # Do not include the first n.bars examples from the training set.
-#     for (i in 1:ceiling(n.iter / (nrow(train.set) - n.bars))) {
-#         idx <- c(idx, sample(nrow(train.set) - n.bars) + n.bars)
-#     }
-#     idx <- idx[1:n.iter]
-#     for (i in 1:n.iter) input <- matrix(train.set[(idx[i] - n.bars + 1):idx[i], ], nrow = 1)
-
-# play <- function(train.set, idx, neurons, n.bars) {
-#     # Use tanh activation for the B/S signal and linear activation for setting the limit.
-#     output <- neurons$z[[length(neurons$z)]]
-#     reward <- 0
-#     if (!round(tanh(output[1]))) return(reward)
-#
-#     entry <- train.set$Close[idx]
-#     #limit <- output[2] # Use the same limit for SL and TP.
-#     limit <- sd(train.set$Close[(idx - n.bars + 1):idx]) * 2
-#     for (i in (idx + 1):nrow(train.set)) {
-#         if (train.set$High[i] > entry + limit) {
-#             reward <- limit
-#             break
-#         }
-#         else if (train.set$Low[i] < entry - limit) {
-#             reward <- -limit
-#             break
-#         }
-#     }
-#     reward * sign(tanh(output[1]))
-# }

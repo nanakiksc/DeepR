@@ -9,12 +9,19 @@ test.set <- scale(input[-idx,], center = attr(train.set, 'scaled:center'), scale
 train.labels <- labels[idx, ]
 test.labels <- labels[-idx,]
 
-n.iter.range <- c(2, 3)
-alpha.range <- c(-4, -2)
-lambda.range <- c(-3, 0)
+# n.iter.range <- c(2, 3)
+# alpha.range <- c(-4, -2)
+# lambda.range <- c(-3, 0)
+# breadth.range <- c(1, 5)
+# depth.vec <- 1:3
+# n.samples <- 60
+
+n.iter.range <- c(2.4, 3)
+alpha.range <- c(-3.4, -2.3)
+lambda.range <- c(-3, -1.5)
 breadth.range <- c(1, 5)
-depth.vec <- 1:3
-n.samples <- 100
+depth.vec <- 2:5
+n.samples <- 60
 
 sample.param <- function(range) runif(1, min = min(range), max = max(range))
 
@@ -34,5 +41,7 @@ for (i in 1:n.samples) {
 names(cv.results) <- c('n.iter', 'alpha', 'lambda', 'breadth', 'depth', 'loss', 'accuracy')
 
 save.path <- '~/Dropbox/iris_test/'
+# prefix <- ''
 prefix <- 'iris_test_'
+# prefix <- paste0(sub('_*$', '', prefix), '_')
 save(cv.results, file = paste0(save.path, prefix, gsub('-|:| ', '', Sys.time()), '.rda'))
