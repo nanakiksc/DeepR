@@ -31,5 +31,4 @@ plot.cv.summary <- function(save.path) {
     }
 }
 
-save.path <- 'Dropbox/iris_test/'
 plot.cv.summary(save.path)

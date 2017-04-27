@@ -17,8 +17,8 @@ init.model <- function(layers, seed = NULL) {
     model
 }
 
-train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, seed = NULL, neuron.type = 'ReLU', diagnostics = FALSE) {
-    model <- init.model(layers, seed)
+train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, seed = NULL, neuron.type = 'ReLU', model = NULL) {
+    if (is.null(model)) model <- init.model(layers, seed)
 
     if (neuron.type == 'ReLU') {
         activation <<- function(z) (abs(z) + z) / 2
