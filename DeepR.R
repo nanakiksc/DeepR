@@ -1,23 +1,40 @@
-# TODO: implement annealing schedule to the learning rate alpha.
+# TODO: implement annealing schedule to the learning rate alpha and momentum coefficient mu.
 # TODO: try dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
-# TODO: add momentum?
+# TODO: add momentum.
 
-init.model <- function(layers, seed = NULL) {
+init.model <- function(layers, seed = NULL, method = 'He') {
     if (!is.null(seed)) set.seed(seed)
+    if (method == 'He') {
+        # He et al. adjusted initialization for deep ReLU networks.
+        scale.weights <- function(weights, nrow, ncol) weights * sqrt(2 / nrow)
+    } else if (method == 'Xavier') {
+        # Xavier initializarion for deep networks.
+        scale.weights <- function(weights, nrow, ncol) weights * sqrt(2 / (nrow + ncol))
+    } else if (method == 'Caffe') {
+        # Caffe version of Xavier initialization.
+        scale.weights <- function(weights, nrow, ncol) weights * sqrt(nrow)
+    } else if (method == 'none') {
+        # Like... no scaling. Why would you do that, right?
+        scale.weights <- function(weights, nrow, ncol) weights * 1
+    } else {
+        print('Unknown wheight initialization method. Please choose He, Xavier, Caffe or none.')
+        stop()
+    }
+
     model <- list(weights = list(), biases = list())
     for (i in 1:(length(layers) - 1)) {
         nrow <- layers[i]
         ncol <- layers[i + 1]
         model$weights[[i]] <- matrix(rnorm(nrow * ncol), nrow = nrow, ncol = ncol)
-        # model$weights[[i]] <- model$weights[[i]] * sqrt(2 / (nrow + ncol)), # Xavier initializarion for deep networks.
-        # model$weights[[i]] <- model$weights[[i]] * sqrt(nrow), # Caffe version of Xavier initialization.
-        model$weights[[i]] <- model$weights[[i]] * sqrt(2 / nrow) # He et al. adjusted initialization for deep ReLU networks.
+        model$weights[[i]] <- scale.weights(model$weights[[i]], nrow = nrow, ncol = ncol)
         model$biases[[i]] <- rep(0, ncol)
+        model$w.velocities[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
+        model$b.velocities[[i]] <- rep(0, ncol)
     }
     model
 }
 
-train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, seed = NULL, neuron.type = 'ReLU', model = NULL) {
+train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, mu = 0, lambda = 0, seed = NULL, neuron.type = 'ReLU', model = NULL) {
     if (is.null(model)) model <- init.model(layers, seed)
 
     if (neuron.type == 'ReLU') {
@@ -38,7 +55,7 @@ train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, lambda = 0, se
          neurons <- forward.propagation(input, model)
          last.deltas <- last.layer(neurons, labels) # Hypothesis and Deltas.
          deltas <- backpropagation(neurons, model, last.deltas$d)
-         model <- update.model(neurons, model, deltas, alpha, lambda)
+         model <- update.model(neurons, model, deltas, alpha, mu, lambda)
       }
       model
 }
@@ -75,6 +92,7 @@ last.layer <- function(neurons, labels) {
    # Compute last layer activations (hypothesis). It must return its deltas.
    # hypothesis <- neurons$z[[length(neurons$z)]] # Linear activation.
    hypothesis <- 1 / (1 + exp(-neurons$z[[length(neurons$z)]])) # Sigmoid activation.
+   # hypothesis <- tanh(neurons$z[[length(neurons$z)]]) # Hyperbolic tangent activation.
    list(h = hypothesis, d = hypothesis - labels)
 }
 
@@ -84,16 +102,20 @@ backpropagation <- function(neurons, model, last.deltas) {
     deltas[[n.layers]] <- last.deltas
     if (n.layers == 2) return(deltas)
     for (i in (n.layers - 1):2) {
-       deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
+       # deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
+        deltas[[i]] <- tcrossprod(deltas[[i + 1]], as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
     }
     deltas
 }
 
-update.model <- function(neurons, model, deltas, alpha = 1, lambda = 0) {
+update.model <- function(neurons, model, deltas, alpha = 1, mu = 0, lambda = 0) {
     for (i in 1:length(model$weights)) {
-        # Update weights with a MINUS as this is a MINIMIZATION problem. Add L2 regularization term.
-        model$weights[[i]] <- model$weights[[i]] - alpha * (t(neurons$a[[i]]) %*% deltas[[i + 1]] + lambda * model$weights[[i]])
-        model$biases[[i]] <- model$biases[[i]] - alpha * colSums(deltas[[i + 1]])
+        # Add momentum and L2 regularization term.
+        # model$weights[[i]] <- model$weights[[i]] - alpha * (t(neurons$a[[i]]) %*% deltas[[i + 1]] + lambda * model$weights[[i]])
+        model$w.velocities[[i]] <- mu * model$w.velocities[[i]] - alpha * (crossprod(neurons$a[[i]], deltas[[i + 1]]) + lambda * model$weights[[i]])
+        model$b.velocities[[i]] <- mu * model$b.velocities[[i]] - alpha * colSums(deltas[[i + 1]])
+        model$weights[[i]] <- model$weights[[i]] + model$w.velocities[[i]]
+        model$biases[[i]] <- model$biases[[i]] + model$b.velocities[[i]]
     }
     model
 }
