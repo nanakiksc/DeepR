@@ -112,10 +112,10 @@ update.model <- function(neurons, model, deltas, alpha = 1, mu = 0, lambda = 0) 
     for (i in 1:length(model$weights)) {
         # Add momentum and L2 regularization term.
         # model$weights[[i]] <- model$weights[[i]] - alpha * (t(neurons$a[[i]]) %*% deltas[[i + 1]] + lambda * model$weights[[i]])
-        model$w.velocities[[i]] <- mu * model$w.velocities[[i]] - alpha * (crossprod(neurons$a[[i]], deltas[[i + 1]]) + lambda * model$weights[[i]])
-        model$b.velocities[[i]] <- mu * model$b.velocities[[i]] - alpha * colSums(deltas[[i + 1]])
-        model$weights[[i]] <- model$weights[[i]] + model$w.velocities[[i]]
-        model$biases[[i]] <- model$biases[[i]] + model$b.velocities[[i]]
+        model$w.velocities[[i]] <- mu * model$w.velocities[[i]] + alpha * (crossprod(neurons$a[[i]], deltas[[i + 1]]) + lambda * model$weights[[i]])
+        model$b.velocities[[i]] <- mu * model$b.velocities[[i]] + alpha * colSums(deltas[[i + 1]])
+        model$weights[[i]] <- model$weights[[i]] - model$w.velocities[[i]]
+        model$biases[[i]] <- model$biases[[i]] - model$b.velocities[[i]]
     }
     model
 }
