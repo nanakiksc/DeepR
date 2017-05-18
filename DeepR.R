@@ -1,6 +1,6 @@
 # TODO: implement annealing schedule to the learning rate alpha and momentum coefficient mu.
 # TODO: try dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
-# TODO: add momentum.
+# TODO: test momentum, add Nesterov version.
 
 init.model <- function(layers, seed = NULL, method = 'He') {
     if (!is.null(seed)) set.seed(seed)
@@ -15,7 +15,7 @@ init.model <- function(layers, seed = NULL, method = 'He') {
         scale.weights <- function(weights, nrow, ncol) weights * sqrt(nrow)
     } else if (method == 'none') {
         # Like... no scaling. Why would you do that, right?
-        scale.weights <- function(weights, nrow, ncol) weights * 1
+        scale.weights <- function(weights, nrow, ncol) weights
     } else {
         print('Unknown wheight initialization method. Please choose He, Xavier, Caffe or none.')
         stop()

@@ -20,15 +20,18 @@ plot.cv.summary <- function(save.path) {
         plot.results[[name]] <- plot.results[[name]][order(plot.results[[name]][name]), ]
     }
 
-    par(mfrow = c(2, 3))
-    for (name in names(all.results)[1:5]) {
-        d <- plot.results[[name]]
-        plot(d[, name], d$loss, xlab = name, ylab = 'Loss', ylim = c(0, max(d$loss, na.rm = TRUE)), mgp = c(2, 1, 0))
-        par(new = TRUE)
-        plot(d[, name], d$accuracy, col = 2, xlab = NA, ylab = NA, ylim = c(0, 1), xaxt = 'n', yaxt = 'n')
-        axis(4, col = 2, col.axis = 2)
-        mtext('Accuracy', 4, 2, col = 2, cex = par('cex'))
-    }
+    library(MASS)
+    all.results$loss <- log(all.results$loss)
+    parcoord(all.results, var.label = TRUE)
+    # par(mfrow = c(2, 3))
+    # for (name in names(all.results)[1:5]) {
+    #     d <- plot.results[[name]]
+    #     plot(d[, name], d$loss, xlab = name, ylab = 'Loss', ylim = c(0, max(d$loss, na.rm = TRUE)), mgp = c(2, 1, 0))
+    #     par(new = TRUE)
+    #     plot(d[, name], d$accuracy, col = 2, xlab = NA, ylab = NA, ylim = c(0, 1), xaxt = 'n', yaxt = 'n')
+    #     axis(4, col = 2, col.axis = 2)
+    #     mtext('Accuracy', 4, 2, col = 2, cex = par('cex'))
+    # }
 }
 
 plot.cv.summary(save.path)
