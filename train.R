@@ -9,12 +9,12 @@ test.set <- scale(input[-idx,], center = attr(train.set, 'scaled:center'), scale
 train.labels <- labels[idx, ]
 test.labels <- labels[-idx,]
 
-n.iter.range <- c(2, 3)
-alpha.range <- c(-5, -4)
+n.iter.range <- c(2, 4)
+alpha.range <- c(-5, -3)
 mu.vec <- c(0.5, 0.9, 0.95, 0.99) # TODO: Increase over time?
 lambda.range <- c(-3, 0)
-breadth.range <- c(1, 5)
-depth.vec <- 1:3
+breadth.range <- c(0, 5)
+depth.vec <- 1:4
 n.samples <- 10
 
 sample.param <- function(range) runif(1, min = min(range), max = max(range))
@@ -31,7 +31,7 @@ for (i in 1:n.samples) {
     layers <- c(ncol(input), rep(breadth, depth), ncol(labels))
     model <- train(layers, train.set, train.labels, n.iter, alpha, mu, lambda)
     cv <- test(model, test.set, test.labels, lambda)
-    cv.results <- rbind(cv.results, c(log10(n.iter), log10(alpha), mu, log10(lambda), log2(breadth), depth, cv$loss, cv$accuracy))
+    cv.results <- rbind(cv.results, c(log10(n.iter), log10(alpha), mu, log10(lambda), log2(breadth / ncol(input)), depth, cv$loss, cv$accuracy))
 }
 names(cv.results) <- c('n.iter', 'alpha', 'mu', 'lambda', 'breadth', 'depth', 'loss', 'accuracy')
 

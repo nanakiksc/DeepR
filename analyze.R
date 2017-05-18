@@ -10,19 +10,22 @@ read.results <- function(save.path) {
 plot.cv.summary <- function(save.path) {
     all.results <- read.results(save.path)
 
-    exclude <- all.results$loss > quantile(all.results, probs = seq(0, 1, 0.01), na.rm = T)[98]
-    exclude[is.na(exclude)] <- FALSE
-    all.results <- all.results[!exclude, ]
-
-    plot.results <- list()
-    for (name in names(all.results)[1:5]) {
-        plot.results[[name]] <- all.results[c(name, 'loss', 'accuracy')]
-        plot.results[[name]] <- plot.results[[name]][order(plot.results[[name]][name]), ]
-    }
+    # exclude <- all.results$loss > quantile(all.results, probs = seq(0, 1, 0.01), na.rm = T)[98]
+    # exclude[is.na(exclude)] <- FALSE
+    # all.results <- all.results[!exclude, ]
+    #
+    # plot.results <- list()
+    # for (name in names(all.results)[1:5]) {
+    #     plot.results[[name]] <- all.results[c(name, 'loss', 'accuracy')]
+    #     plot.results[[name]] <- plot.results[[name]][order(plot.results[[name]][name]), ]
+    # }
 
     library(MASS)
-    all.results$loss <- log(all.results$loss)
-    parcoord(all.results, var.label = TRUE)
+    log.loss <- log(all.results$loss)
+    range01 <- function(x) { x <- x - min(x, na.rm = TRUE); x / max(x, na.rm = TRUE) }
+    colors <- range01(log.loss)
+    colors[is.na(colors)] <- max(colors, na.rm = TRUE)
+    parcoord(all.results, var.label = TRUE, col = grey(colors))
     # par(mfrow = c(2, 3))
     # for (name in names(all.results)[1:5]) {
     #     d <- plot.results[[name]]
