@@ -7,34 +7,21 @@ read.results <- function(save.path) {
     all.results
 }
 
-plot.cv.summary <- function(save.path) {
-    all.results <- read.results(save.path)
+plot.cv.summary <- function(save.path, show = 1, threshold = 1) {
+    # show only that best proportion of values (loss).
+    # threshold the intensity to color the resulting plot.
+    stopifnot(show >= 0 && show <=1)
+    results <- read.results(save.path)
 
-    # exclude <- all.results$loss > quantile(all.results, probs = seq(0, 1, 0.01), na.rm = T)[98]
-    # exclude[is.na(exclude)] <- FALSE
-    # all.results <- all.results[!exclude, ]
-    #
-    # plot.results <- list()
-    # for (name in names(all.results)[1:5]) {
-    #     plot.results[[name]] <- all.results[c(name, 'loss', 'accuracy')]
-    #     plot.results[[name]] <- plot.results[[name]][order(plot.results[[name]][name]), ]
-    # }
+    exclude <- results$loss > quantile(results, probs = seq(0, 1, 0.01), na.rm = T)[round(100 * show)]
+    exclude[is.na(exclude)] <- FALSE
+    results <- results[!exclude, ]
+    results$loss <- log(results$loss)
 
     library(MASS)
-    log.loss <- log(all.results$loss)
-    range01 <- function(x) { x <- x - min(x, na.rm = TRUE); x / max(x, na.rm = TRUE) }
-    colors <- range01(log.loss)
-    colors[is.na(colors)] <- max(colors, na.rm = TRUE)
-    parcoord(all.results, var.label = TRUE, col = grey(colors))
-    # par(mfrow = c(2, 3))
-    # for (name in names(all.results)[1:5]) {
-    #     d <- plot.results[[name]]
-    #     plot(d[, name], d$loss, xlab = name, ylab = 'Loss', ylim = c(0, max(d$loss, na.rm = TRUE)), mgp = c(2, 1, 0))
-    #     par(new = TRUE)
-    #     plot(d[, name], d$accuracy, col = 2, xlab = NA, ylab = NA, ylim = c(0, 1), xaxt = 'n', yaxt = 'n')
-    #     axis(4, col = 2, col.axis = 2)
-    #     mtext('Accuracy', 4, 2, col = 2, cex = par('cex'))
-    # }
+    n.colors <- 256
+    colors <- colorRampPalette(c('black', rep('white', threshold)))(n.colors)
+    parcoord(results, var.label = TRUE, col = colors[cut(results$loss, n.colors)])
 }
 
-plot.cv.summary(save.path)
+plot.cv.summary(save.path, 0.5, 2)

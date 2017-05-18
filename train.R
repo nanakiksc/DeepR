@@ -11,7 +11,7 @@ test.labels <- labels[-idx,]
 
 n.iter.range <- c(2, 4)
 alpha.range <- c(-5, -3)
-mu.vec <- c(0.5, 0.9, 0.95, 0.99) # TODO: Increase over time?
+mu.range <- c(0, 1) # mu.vec <- c(0.5, 0.9, 0.95, 0.99) # TODO: Increase over time?
 lambda.range <- c(-3, 0)
 breadth.range <- c(0, 5)
 depth.vec <- 1:4
@@ -23,7 +23,7 @@ cv.results <- data.frame()
 for (i in 1:n.samples) {
     n.iter <- round(10^sample.param(n.iter.range))
     alpha <- 10^sample.param(alpha.range)
-    mu <- sample(mu.vec, 1)
+    mu <- sample.param(mu.range)
     lambda <- 10^sample.param(lambda.range)
     breadth <- round(ncol(input) * 2^sample.param(breadth.range))
     depth <- sample(depth.vec, 1)
