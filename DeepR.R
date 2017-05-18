@@ -1,6 +1,7 @@
 # TODO: implement annealing schedule to the learning rate alpha and momentum coefficient mu.
 # TODO: try dropout (hidden units are set to 0 with probability p). Already done by ReLU?. At test time, out weights are multiplied by p.
 # TODO: test momentum, add Nesterov version.
+# TODO: customize last layer (and maybe test function).
 
 init.model <- function(layers, seed = NULL, method = 'He') {
     if (!is.null(seed)) set.seed(seed)
@@ -98,11 +99,10 @@ last.layer <- function(neurons, labels) {
 
 backpropagation <- function(neurons, model, last.deltas) {
     n.layers <- length(model$weights) + 1
-    deltas <- list()
+    deltas <- list() # TODO: maybe avoid creating a list at every iteration.
     deltas[[n.layers]] <- last.deltas
     if (n.layers == 2) return(deltas)
     for (i in (n.layers - 1):2) {
-       # deltas[[i]] <- deltas[[i + 1]] %*% t(as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
         deltas[[i]] <- tcrossprod(deltas[[i + 1]], as.matrix(model$weights[[i]])) * gradient(neurons$z[[i]])
     }
     deltas
@@ -111,7 +111,6 @@ backpropagation <- function(neurons, model, last.deltas) {
 update.model <- function(neurons, model, deltas, alpha = 1, mu = 0, lambda = 0) {
     for (i in 1:length(model$weights)) {
         # Add momentum and L2 regularization term.
-        # model$weights[[i]] <- model$weights[[i]] - alpha * (t(neurons$a[[i]]) %*% deltas[[i + 1]] + lambda * model$weights[[i]])
         model$w.velocities[[i]] <- mu * model$w.velocities[[i]] + alpha * (crossprod(neurons$a[[i]], deltas[[i + 1]]) + lambda * model$weights[[i]])
         model$b.velocities[[i]] <- mu * model$b.velocities[[i]] + alpha * colSums(deltas[[i + 1]])
         model$weights[[i]] <- model$weights[[i]] - model$w.velocities[[i]]
