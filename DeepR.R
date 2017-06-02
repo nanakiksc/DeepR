@@ -1,7 +1,5 @@
-# TODO: implement annealing schedule to the learning rate alpha and momentum coefficient mu. Unnecessary with Adam?
-# TODO: try dropout (hidden units are set to 0 with probability p). At test time, out weights are multiplied by p.
-# TODO: test momentum, add Nesterov version.
-# TODO: implement Adam instead.
+# TODO: try dropout (hidden units are set to 0 with probability p, at test time, out weights are multiplied by p).
+# TODO: implement Adam. Add Nesterov momentum (Nadam)?
 # TODO: customize last layer (and maybe test function).
 
 init.model <- function(layers, seed = NULL, method = 'He') {
@@ -22,16 +20,17 @@ init.model <- function(layers, seed = NULL, method = 'He') {
         model$w.velocities[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
         model$b.velocities[[i]] <- rep(0, ncol)
         # TODO: deltas and neurons NOT vectors if operations are vectorized (they are matrices).
-        model$deltas[[i + 1]] <- rep(NA, layers[i + 1]) # deltas[[1]] is NULL.
-        model$neurons$a[[i + 1]] <- rep(NA, layers[i + 1]) # neurons$a[[1]] are the inputs.
-        model$neurons$z[[i + 1]] <- rep(NA, layers[i + 1]) # neurons$z[[1]] is NULL.
+        # TODO: these guys aren't even necessary, as they will be init at the firs iteration.
+        # model$deltas[[i + 1]] <- rep(NA, layers[i + 1]) # deltas[[1]] is NULL.
+        # model$neurons$a[[i + 1]] <- rep(NA, layers[i + 1]) # neurons$a[[1]] are the inputs.
+        # model$neurons$z[[i + 1]] <- rep(NA, layers[i + 1]) # neurons$z[[1]] is NULL.
     }
 
     model
 }
 
-train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, mu = 0, lambda = 0, seed = NULL, neuron.type = 'ReLU', model = NULL) {
-    if (is.null(model)) model <- init.model(layers, seed)
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1, mu = 0, lambda = 0, neuron.type = 'ReLU') {
+    input <- as.matrix(input)
 
     if (neuron.type == 'ReLU') {
         activation <<- function(z) (abs(z) + z) / 2
@@ -61,11 +60,11 @@ train <- function(layers, input, labels, n.iter = 1e3, alpha = 1, mu = 0, lambda
 }
 
 test <- function(model, input, labels, lambda = 0) {
-   neurons <- forward.propagation(input, model)
-   hypothesis <- last.layer(neurons, labels)$h
+   model <- forward.propagation(input, model)
+   hypothesis <- last.layer(model, labels)$h
    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
-   loss <- loss + lambda * sum(unlist(model$weights)^2) / (2 * nrow(neurons$z[[length(neurons$z)]])) # Add L2 regularization term.
+   loss <- loss + lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
    accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
    list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
@@ -79,11 +78,11 @@ forward.propagation <- function(input, model) {
       for (i in 2:n.weights) {
          # neurons$z[[i]] <- sweep(neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
          # neurons$a[[i]] <- activation(neurons$z[[i]])
-         model$neurons$z[[i]] <- sweep(neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
-         model$neurons$a[[i]] <- activation(neurons$z[[i]])
+         model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
+         model$neurons$a[[i]] <- activation(model$neurons$z[[i]])
       }
    }
-   neurons$z[[n.weights + 1]] <- sweep(neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
+   model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
    # neurons
    model
 }
@@ -96,6 +95,7 @@ gradient <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
 last.layer <- function(model, labels) {
    # Compute last layer activations (hypothesis). It must return its deltas.
    # hypothesis <- model$neurons$z[[length(model$neurons$z)]] # Linear activation.
+   # print(model$neurons$z[[length(model$neurons$z)]])
    hypothesis <- 1 / (1 + exp(-model$neurons$z[[length(model$neurons$z)]])) # Sigmoid activation.
    # hypothesis <- tanh(model$neurons$z[[length(model$neurons$z)]]) # Hyperbolic tangent activation.
    list(h = hypothesis, d = hypothesis - labels)
