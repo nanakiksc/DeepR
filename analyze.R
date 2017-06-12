@@ -8,8 +8,8 @@ read.results <- function(save.path) {
 }
 
 plot.cv.summary <- function(save.path, name = 'loss', show = 1, threshold = 1) {
-    # show only that best proportion of name values.
-    # threshold the intensity to color the resulting plot.
+    # `show` only that best proportion of name values.
+    # `threshold` the intensity to color the resulting plot.
     stopifnot(show >= 0 && show <=1)
     results <- read.results(save.path)
 
