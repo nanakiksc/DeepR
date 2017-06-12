@@ -13,14 +13,17 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         model$weights[[i]] <- matrix(rnorm(nrow * ncol), nrow = nrow, ncol = ncol)
         model$weights[[i]] <- scale.weights(model$weights[[i]], scale.method)
         model$biases[[i]] <- rep(0, ncol)
-        model$w.velocities[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
-        model$b.velocities[[i]] <- rep(0, ncol)
+        model$m.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
+        model$m.biases[[i]] <- rep(0, ncol)
+        model$v.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
+        model$v.biases[[i]] <- rep(0, ncol)
     }
+    model$iteration <- 0
 
     model
 }
 
-train <- function(model, input, labels, n.iter = 1e3, alpha = 1, mu = 0, lambda = 0) {
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, lambda = 0) {
     input <- as.matrix(input)
 
     for (i in 1:n.iter) {
@@ -101,13 +104,17 @@ backpropagation <- function(model, last.deltas) {
     model
 }
 
-update.model <- function(model, alpha = 1, mu = 0, lambda = 0) {
+update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, mu = 0, lambda = 0) {
+    iteration <- iteration + 1
     for (i in 1:length(model$weights)) {
-        # Add momentum and L2 regularization term.
-        model$w.velocities[[i]] <- mu * model$w.velocities[[i]] + alpha * (crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]])
-        model$b.velocities[[i]] <- mu * model$b.velocities[[i]] + alpha * colSums(model$deltas[[i + 1]])
-        model$weights[[i]] <- model$weights[[i]] - model$w.velocities[[i]]
-        model$biases[[i]] <- model$biases[[i]] - model$b.velocities[[i]]
+        # Adam update. Add L2 regularization term to weights.
+        model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * (crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]])
+        model$m.biases[[i]] <- beta1 * model$m.biases[[i]] + (1 - beta1) * colSums(model$deltas[[i + 1]])
+        model$v.weights[[i]] <- beta2 * model$v.weights[[i]] + (1 - beta2) * (crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]])^2
+        model$v.biases[[i]] <- beta2 * model$v.biases[[i]] + (1 - beta2) * colSums(model$deltas[[i + 1]])^2
+
+        model$weights[[i]] <- model$weights[[i]] - alpha * model$m.weights[[i]] / (1 - beta1^iteration) / (sqrt(model$v.weights[[i]] / (1 - beta2^iteration)) + epsilon)
+        model$biases[[i]] <- model$biases[[i]] - alpha * model$m.biases[[i]] / (1 - beta1^iteration) / (sqrt(model$v.biases[[i]] / (1 - beta2^iteration)) + epsilon)
     }
     model
 }
