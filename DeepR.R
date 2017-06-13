@@ -1,6 +1,6 @@
 # TODO: try dropout (hidden units are set to 0 with probability p, at test time, out weights are multiplied by p).
-# TODO: implement Adam. Add Nesterov momentum (Nadam)?
-# TODO: customize last.layer() (and maybe test()).
+# TODO: test Adam speedup (what's going on with 'epsilon hat'?). Add Nesterov momentum (Nadam)?
+# TODO: customize last.layer(): define it as part of the model (and maybe test()).
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He') {
     if (!is.null(seed)) set.seed(seed)
@@ -30,12 +30,14 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
          model <- forward.propagation(input, model)
          last.deltas <- last.layer(model, labels) # Hypothesis and Deltas.
          model <- backpropagation(model, last.deltas$d)
-         model <- update.model(model, alpha, mu, lambda)
+         model <- update.model(model, alpha, lambda)
       }
       model
 }
 
 test <- function(model, input, labels, lambda = 0) {
+   input <- as.matrix(input)
+
    model <- forward.propagation(input, model)
    hypothesis <- last.layer(model, labels)$h
    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
@@ -79,7 +81,7 @@ forward.propagation <- function(input, model) {
     if (n.weights > 1) {
         for (i in 2:n.weights) {
             model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
-            model$neurons$a[[i]] <- activation(model$neurons$z[[i]])
+            model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
         }
     }
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
@@ -99,22 +101,29 @@ backpropagation <- function(model, last.deltas) {
     model$deltas[[n.layers]] <- last.deltas
     if (n.layers == 2) return(model)
     for (i in (n.layers - 1):2) {
-        model$deltas[[i]] <- tcrossprod(model$deltas[[i + 1]], as.matrix(model$weights[[i]])) * gradient(model$neurons$z[[i]])
+        model$deltas[[i]] <- tcrossprod(model$deltas[[i + 1]], as.matrix(model$weights[[i]])) * model$gradient(model$neurons$z[[i]])
     }
     model
 }
 
-update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, mu = 0, lambda = 0) {
-    iteration <- iteration + 1
+update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, lambda = 0) {
+    model$iteration <- model$iteration + 1
     for (i in 1:length(model$weights)) {
-        # Adam update. Add L2 regularization term to weights.
-        model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * (crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]])
-        model$m.biases[[i]] <- beta1 * model$m.biases[[i]] + (1 - beta1) * colSums(model$deltas[[i + 1]])
-        model$v.weights[[i]] <- beta2 * model$v.weights[[i]] + (1 - beta2) * (crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]])^2
-        model$v.biases[[i]] <- beta2 * model$v.biases[[i]] + (1 - beta2) * colSums(model$deltas[[i + 1]])^2
+        # Compute gradients.
+        model$weights.grad[[i]] <- crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]] # Add L2 regularization term.
+        model$biases.grad[[i]]  <- colSums(model$deltas[[i + 1]])
 
-        model$weights[[i]] <- model$weights[[i]] - alpha * model$m.weights[[i]] / (1 - beta1^iteration) / (sqrt(model$v.weights[[i]] / (1 - beta2^iteration)) + epsilon)
-        model$biases[[i]] <- model$biases[[i]] - alpha * model$m.biases[[i]] / (1 - beta1^iteration) / (sqrt(model$v.biases[[i]] / (1 - beta2^iteration)) + epsilon)
+        # Adam update.
+        model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * model$weights.grad[[i]]
+        model$m.biases[[i]]  <- beta1 * model$m.biases[[i]]  + (1 - beta1) * model$biases.grad[[i]]
+        model$v.weights[[i]] <- beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2
+        model$v.biases[[i]]  <- beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2
+
+        alpha.t <- alpha * sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration)
+        model$weights[[i]] <- model$weights[[i]] - alpha.t * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon) # These are the 'epislon hat' from the Adam paper.
+        model$biases[[i]] <- model$biases[[i]] - alpha.t * model$m.biases[[i]] / (sqrt(model$v.biases[[i]]) + epsilon)
+        # model$weights[[i]] <- model$weights[[i]] - alpha * model$m.weights[[i]] / (1 - beta1^model$iteration) / (sqrt(model$v.weights[[i]] / (1 - beta2^model$iteration)) + epsilon)
+        # model$biases[[i]] <- model$biases[[i]] - alpha * model$m.biases[[i]] / (1 - beta1^model$iteration) / (sqrt(model$v.biases[[i]] / (1 - beta2^model$iteration)) + epsilon)
     }
     model
 }
