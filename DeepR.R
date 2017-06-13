@@ -1,5 +1,5 @@
 # TODO: try dropout (hidden units are set to 0 with probability p, at test time, out weights are multiplied by p).
-# TODO: test Adam speedup (what's going on with 'epsilon hat'?). Add Nesterov momentum (Nadam)?
+# TODO: Add Nesterov momentum (Nadam)?
 # TODO: customize last.layer(): define it as part of the model (and maybe test()).
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He') {
@@ -12,11 +12,11 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         ncol <- layers[i + 1]
         model$weights[[i]] <- matrix(rnorm(nrow * ncol), nrow = nrow, ncol = ncol)
         model$weights[[i]] <- scale.weights(model$weights[[i]], scale.method)
-        model$biases[[i]] <- rep(0, ncol)
+        model$biases[[i]]  <- rep(0, ncol)
         model$m.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
-        model$m.biases[[i]] <- rep(0, ncol)
+        model$m.biases[[i]]  <- rep(0, ncol)
         model$v.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
-        model$v.biases[[i]] <- rep(0, ncol)
+        model$v.biases[[i]]  <- rep(0, ncol)
     }
     model$iteration <- 0
 
@@ -49,21 +49,19 @@ test <- function(model, input, labels, lambda = 0) {
 
 choose.neuron <- function(model, neuron.type) {
     if (neuron.type == 'ReLU') {
-        activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] <- 0.
-        gradient <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
+        model$activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] <- 0.
+        model$gradient   <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
     } else if (neuron.type == 'sigmoid') {
-        activation <- function(z) 1 / (1 + exp(-z))
-        gradient <- function(z) { s <- activation(z); s * (1 - s) }
+        model$activation <- function(z) 1 / (1 + exp(-z))
+        model$gradient   <- function(z) { s <- activation(z); s * (1 - s) }
     } else if (neuron.type == 'tanh') {
-        activation <- function(z) tanh(z)
-        gradient <- function(z) 1 - tanh(z)^2
+        model$activation <- function(z) tanh(z)
+        model$gradient   <- function(z) 1 - tanh(z)^2
     } else {
         print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
         stop()
     }
 
-    model$activation <- activation
-    model$gradient <- gradient
     model
 }
 
@@ -120,10 +118,8 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
         model$v.biases[[i]]  <- beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2
 
         alpha.t <- alpha * sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration)
-        model$weights[[i]] <- model$weights[[i]] - alpha.t * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon) # These are the 'epislon hat' from the Adam paper.
-        model$biases[[i]] <- model$biases[[i]] - alpha.t * model$m.biases[[i]] / (sqrt(model$v.biases[[i]]) + epsilon)
-        # model$weights[[i]] <- model$weights[[i]] - alpha * model$m.weights[[i]] / (1 - beta1^model$iteration) / (sqrt(model$v.weights[[i]] / (1 - beta2^model$iteration)) + epsilon)
-        # model$biases[[i]] <- model$biases[[i]] - alpha * model$m.biases[[i]] / (1 - beta1^model$iteration) / (sqrt(model$v.biases[[i]] / (1 - beta2^model$iteration)) + epsilon)
+        model$weights[[i]] <- model$weights[[i]] - alpha.t * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
+        model$biases[[i]]  <- model$biases[[i]]  - alpha.t * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
     }
     model
 }
