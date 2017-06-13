@@ -28,9 +28,9 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
 
     for (i in 1:n.iter) {
          model <- forward.propagation(input, model)
-         last.deltas <- last.layer(model, labels) # Hypothesis and Deltas.
-         model <- backpropagation(model, last.deltas$d)
-         model <- update.model(model, alpha, lambda)
+         last.deltas <- last.layer(model, labels)$d
+         model <- backpropagation(model, last.deltas)
+         model <- update.model(model, alpha, beta1, beta2, epsilon, lambda)
       }
       model
 }
