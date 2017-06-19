@@ -1,8 +1,7 @@
-# TODO: try dropout (hidden units are set to 0 with probability p, at test time, out weights are multiplied by p).
-# TODO: Add Nesterov momentum (Nadam)?
+# TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: customize last.layer(): define it as part of the model (and maybe test()).
 
-init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He') {
+init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
 
     model <- list(weights = list(), biases = list())
@@ -19,30 +18,33 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         model$v.biases[[i]]  <- rep(0, ncol)
     }
     model$iteration <- 0
+    model$dropout <- dropout
+    model$dropout.input <- dropout.input
+    model$lambda <- lambda
 
     model
 }
 
-train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, lambda = 0) {
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8) {
     input <- as.matrix(input)
 
     for (i in 1:n.iter) {
          model <- forward.propagation(input, model)
          last.deltas <- last.layer(model, labels)$d
          model <- backpropagation(model, last.deltas)
-         model <- update.model(model, alpha, beta1, beta2, epsilon, lambda)
+         model <- update.model(model, alpha, beta1, beta2, epsilon)
       }
       model
 }
 
-test <- function(model, input, labels, lambda = 0) {
+test <- function(model, input, labels) {
    input <- as.matrix(input)
 
-   model <- forward.propagation(input, model)
+   model <- forward.propagation(input, model, dropout = FALSE)
    hypothesis <- last.layer(model, labels)$h
    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
-   loss <- loss + lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
+   loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
    accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
    list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
@@ -73,17 +75,33 @@ scale.weights <- function (weights, scale.method = 'He') {
     else { print('Unknown wheight initialization method. Please choose He, Xavier, Caffe or none.'); stop() }
 }
 
-forward.propagation <- function(input, model) {
+forward.propagation <- function(input, model, dropout = TRUE) {
     model$neurons$a[[1]] <- input
+    if (dropout) model$neurons$a[[1]] <- dropout.mask(model, 1)
     n.weights <- length(model$weights)
     if (n.weights > 1) {
-        for (i in 2:n.weights) {
-            model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
-            model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
-        }
+       for (i in 2:n.weights) {
+          weights <- model$weights[[i - 1]]
+          if (!dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
+          model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
+          model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
+          if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
+       }
     }
-    model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
+    # Last layer always contains all neurons.
+    weights <- model$weights[[n.weights]]
+    if (!dropout) weights <- weights * model$dropout
+    model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
+
     model
+}
+
+dropout.mask <- function(model, layer) {
+   nrow <- nrow(model$neurons$a[[layer]])
+   ncol <- ncol(model$neurons$a[[layer]])
+   dropout <- if (layer == 1) model$dropout.input else model$dropout
+   mask <- matrix(sample(0:1, nrow * ncol, replace = TRUE, prob = c(1 - dropout, dropout)), nrow = nrow, ncol = ncol)
+   model$neurons$a[[layer]] * mask
 }
 
 last.layer <- function(model, labels) {
@@ -104,11 +122,11 @@ backpropagation <- function(model, last.deltas) {
     model
 }
 
-update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, lambda = 0) {
+update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8) {
     model$iteration <- model$iteration + 1
     for (i in 1:length(model$weights)) {
         # Compute gradients.
-        model$weights.grad[[i]] <- crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + lambda * model$weights[[i]] # Add L2 regularization term.
+        model$weights.grad[[i]] <- crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + model$lambda * model$weights[[i]] # Add L2 regularization term.
         model$biases.grad[[i]]  <- colSums(model$deltas[[i + 1]])
 
         # Adam update.

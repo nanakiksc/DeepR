@@ -5,9 +5,9 @@ labels <- matrix(c(iris[5] == 'setosa', iris[5] == 'virginica', iris[5] == 'vers
 
 idx <- sample(nrow(input), nrow(input) * 0.8)
 train.set <- scale(input[idx, ])
-test.set <- scale(input[-idx,], center = attr(train.set, 'scaled:center'), scale = attr(train.set, 'scaled:scale'))
+test.set <- scale(input[-idx, ], center = attr(train.set, 'scaled:center'), scale = attr(train.set, 'scaled:scale'))
 train.labels <- labels[idx, ]
-test.labels <- labels[-idx,]
+test.labels <- labels[-idx, ]
 
 n.iter.range <- c(2, 4)
 alpha.range <- c(-5, -3)
