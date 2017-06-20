@@ -1,5 +1,5 @@
 # TODO: Add Nesterov momentum to Adam (Nadam).
-# TODO: customize last.layer(): define it as part of the model (and maybe test()).
+# TODO: customize last.layer(): define it as part of the model (and therefore test()).
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
@@ -25,18 +25,16 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
     model
 }
 
-train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8){#, batch.size = nrow(input)) {
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, batch.size = nrow(input)) {
     input <- scale(as.matrix(input))
-    # input <- as.matrix(input)
-    # batch.size <- min(batch.size, nrow(input))
+    batch.size <- min(batch.size, nrow(input))
     attr(model, 'scaled:center') <- attr(input, 'scaled:center')
     attr(model, 'scaled:scale') <- attr(input, 'scaled:scale')
 
     for (i in 1:n.iter) {
-        # idx <- sample(nrow(input), batch.size)
-        model <- forward.propagation(input, model)
-        # model <- forward.propagation(input[idx, ], model)
-        last.deltas <- last.layer(model, labels)$d
+        idx <- sample(nrow(input), batch.size)
+        model <- forward.propagation(input[idx, ], model)
+        last.deltas <- last.layer(model, labels[idx, ])$d
         model <- backpropagation(model, last.deltas)
         model <- update.model(model, alpha, beta1, beta2, epsilon)
     }
@@ -52,7 +50,7 @@ test <- function(model, input, labels) {
     # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
 
     # Cross-entropy (logistic) loss.
-    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis))
+    loss <- -labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)
     loss[is.nan(loss)] <- 0
     loss <- mean(loss)
 
