@@ -25,15 +25,17 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
     model
 }
 
-train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, batch.size = nrow(input)) {
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8){#, batch.size = nrow(input)) {
     input <- scale(as.matrix(input))
-    batch.size <- min(batch.size, nrow(input))
+    # input <- as.matrix(input)
+    # batch.size <- min(batch.size, nrow(input))
     attr(model, 'scaled:center') <- attr(input, 'scaled:center')
     attr(model, 'scaled:scale') <- attr(input, 'scaled:scale')
 
     for (i in 1:n.iter) {
-        idx <- sample(nrow(input), batch.size)
-        model <- forward.propagation(input[idx, ], model)
+        # idx <- sample(nrow(input), batch.size)
+        model <- forward.propagation(input, model)
+        # model <- forward.propagation(input[idx, ], model)
         last.deltas <- last.layer(model, labels)$d
         model <- backpropagation(model, last.deltas)
         model <- update.model(model, alpha, beta1, beta2, epsilon)
@@ -42,12 +44,18 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
 }
 
 test <- function(model, input, labels) {
+    input <- as.matrix(input)
     input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
 
     model <- forward.propagation(input, model, dropout = FALSE)
     hypothesis <- last.layer(model, labels)$h
     # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
-    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
+
+    # Cross-entropy (logistic) loss.
+    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis))
+    loss[is.nan(loss)] <- 0
+    loss <- mean(loss)
+
     loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
     accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
     list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
