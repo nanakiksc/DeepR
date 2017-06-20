@@ -25,28 +25,32 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
     model
 }
 
-train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8) {
-    input <- as.matrix(input)
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, batch.size = nrow(input)) {
+    input <- scale(as.matrix(input))
+    batch.size <- min(batch.size, nrow(input))
+    attr(model, 'scaled:center') <- attr(input, 'scaled:center')
+    attr(model, 'scaled:scale') <- attr(input, 'scaled:scale')
 
     for (i in 1:n.iter) {
-         model <- forward.propagation(input, model)
-         last.deltas <- last.layer(model, labels)$d
-         model <- backpropagation(model, last.deltas)
-         model <- update.model(model, alpha, beta1, beta2, epsilon)
-      }
-      model
+        idx <- sample(nrow(input), batch.size)
+        model <- forward.propagation(input[idx, ], model)
+        last.deltas <- last.layer(model, labels)$d
+        model <- backpropagation(model, last.deltas)
+        model <- update.model(model, alpha, beta1, beta2, epsilon)
+    }
+    model
 }
 
 test <- function(model, input, labels) {
-   input <- as.matrix(input)
+    input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
 
-   model <- forward.propagation(input, model, dropout = FALSE)
-   hypothesis <- last.layer(model, labels)$h
-   # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
-   loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
-   loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
-   accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
-   list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
+    model <- forward.propagation(input, model, dropout = FALSE)
+    hypothesis <- last.layer(model, labels)$h
+    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
+    loss <- mean(-labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)) # Cross-entropy (logistic) loss.
+    loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
+    accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
+    list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
 
 choose.neuron <- function(model, neuron.type) {
@@ -80,13 +84,13 @@ forward.propagation <- function(input, model, dropout = TRUE) {
     if (dropout) model$neurons$a[[1]] <- dropout.mask(model, 1)
     n.weights <- length(model$weights)
     if (n.weights > 1) {
-       for (i in 2:n.weights) {
-          weights <- model$weights[[i - 1]]
-          if (!dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
-          model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
-          model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
-          if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
-       }
+        for (i in 2:n.weights) {
+            weights <- model$weights[[i - 1]]
+            if (!dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
+            model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
+            model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
+            if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
+        }
     }
     # Last layer always contains all neurons.
     weights <- model$weights[[n.weights]]
@@ -97,11 +101,11 @@ forward.propagation <- function(input, model, dropout = TRUE) {
 }
 
 dropout.mask <- function(model, layer) {
-   nrow <- nrow(model$neurons$a[[layer]])
-   ncol <- ncol(model$neurons$a[[layer]])
-   dropout <- if (layer == 1) model$dropout.input else model$dropout
-   mask <- matrix(sample(0:1, nrow * ncol, replace = TRUE, prob = c(1 - dropout, dropout)), nrow = nrow, ncol = ncol)
-   model$neurons$a[[layer]] * mask
+    nrow <- nrow(model$neurons$a[[layer]])
+    ncol <- ncol(model$neurons$a[[layer]])
+    dropout <- if (layer == 1) model$dropout.input else model$dropout
+    mask <- matrix(sample(0:1, nrow * ncol, replace = TRUE, prob = c(1 - dropout, dropout)), nrow = nrow, ncol = ncol)
+    model$neurons$a[[layer]] * mask
 }
 
 last.layer <- function(model, labels) {
