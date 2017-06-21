@@ -1,5 +1,6 @@
-# TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: customize last.layer(): define it as part of the model (and therefore test()).
+# TODO: Add Nesterov momentum to Adam (Nadam).
+# TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
@@ -27,9 +28,10 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
 
 train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, batch.size = nrow(input)) {
     input <- scale(as.matrix(input))
-    batch.size <- min(batch.size, nrow(input))
     attr(model, 'scaled:center') <- attr(input, 'scaled:center')
     attr(model, 'scaled:scale') <- attr(input, 'scaled:scale')
+    labels <- as.matrix(labels)
+    batch.size <- min(batch.size, nrow(input))
 
     for (i in 1:n.iter) {
         idx <- sample(nrow(input), batch.size)
@@ -42,19 +44,17 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
 }
 
 test <- function(model, input, labels) {
-    input <- as.matrix(input)
     input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
+    labels <- as.matrix(labels)
 
     model <- forward.propagation(input, model, dropout = FALSE)
     hypothesis <- last.layer(model, labels)$h
     # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
-
-    # Cross-entropy (logistic) loss.
-    loss <- -labels * log(hypothesis) - (1 - labels) * log(1 - hypothesis)
-    loss[is.nan(loss)] <- 0
-    loss <- mean(loss)
+    loss <- mean(Vectorize(function(l, h) if (l) -log(h) else -log(1 - h))(labels, hypothesis)) # Cross-entropy (logistic) loss.
+    # loss <- mean(Vectorize(function(l, h) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(labels, hypothesis)) # Cross-entropy (tanh) loss.
 
     loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
+
     accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
     list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
