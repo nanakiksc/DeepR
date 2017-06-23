@@ -50,7 +50,7 @@ test <- function(model, input, labels) {
     model <- forward.propagation(input, model, dropout = FALSE)
     hypothesis <- last.layer(model, labels)$h
     # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
-    loss <- mean(Vectorize(function(l, h) if (l == 1) -log(h) else -log(1 - h))(labels, hypothesis)) # Cross-entropy (logistic) loss.
+    loss <- mean(Vectorize(function(l, h) if (l) -log(h) else -log(1 - h))(labels, hypothesis)) # Cross-entropy (logistic) loss.
     # loss <- mean(Vectorize(function(l, h) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(labels, hypothesis)) # Cross-entropy (tanh) loss.
 
     loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
