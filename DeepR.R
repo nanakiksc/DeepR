@@ -56,14 +56,15 @@ test <- function(model, input, labels) {
 
     model <- forward.propagation(model, input, dropout = FALSE)
     # hypothesis <- last.layer(model, labels)$h
-    hypothesis <- model$neurons$a[[length(model$neurons$a)]]
+    hypothesis <- model$neurons$a[[length(model$neurons$a)]] # Already computed in forward propagation.
     # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
     # loss <- mean(Vectorize(function(l, h) if (l) -log(h) else -log(1 - h))(labels, hypothesis)) # Cross-entropy (logistic) loss.
     # loss <- mean(Vectorize(function(l, h) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(labels, hypothesis)) # Cross-entropy (tanh) loss.
     loss <- model$loss(hypothesis, labels)
     loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
 
-    accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
+    accuracy <- NA
+    if (model$task.type != 'regression') accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
     list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
 
@@ -86,13 +87,17 @@ choose.neuron <- function(model, neuron.type) {
 }
 
 choose.task <- function(model, task.type) {
+    # TODO: Add softmax.
     if (compare.words('regression', task.type)) {
+        model$task.type  <- 'regression'
         model$hypothesis <- function(model) model$neurons$z[[length(model$neurons$z)]] # Linear activation.
         model$loss       <- function(h, l) mean((h - l)^2) / 2 # MSE (regression) loss.
     } else if (compare.words('sigmoid.classification', task.type)) {
+        model$task.type  <- 'sigmoid.classification'
         model$hypothesis <- function(model) 1 / (1 + exp(-model$neurons$z[[length(model$neurons$z)]])) # Sigmoid activation.
         model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l) -log(h) else -log(1 - h))(h, l)) # Cross-entropy (logistic) loss.
     } else if (compare.words('tanh.classification', task.type)) {
+        model$task.type  <- 'tanh.classification'
         model$hypothesis <- function(model) tanh(model$neurons$z[[length(model$neurons$z)]]) # Hyperbolic tangent activation.
         model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(h, l)) # Cross-entropy (tanh) loss.
     } else if (compare.words('none', task.type)) {
@@ -129,11 +134,11 @@ forward.propagation <- function(model, input, dropout = TRUE) {
             if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
         }
     }
-    # Last layer always contains all neurons (no dropout).
+     # Last layer always contains all neurons (no dropout).
     weights <- model$weights[[n.weights]]
     if (!dropout) weights <- weights * model$dropout
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
-    model$neurons$a[[n.weights + 1]] <- model$hypothesis(model$neurons$z[[n.weights + 1]])
+    model$neurons$a[[n.weights + 1]] <- model$hypothesis(model)
 
     model
 }
