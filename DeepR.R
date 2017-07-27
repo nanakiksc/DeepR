@@ -13,6 +13,10 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         ncol <- layers[i + 1]
         model$weights[[i]] <- matrix(rnorm(nrow * ncol), nrow = nrow, ncol = ncol)
         model$weights[[i]] <- scale.weights(model$weights[[i]], scale.method)
+        if (recurrent && i > 1) {
+            model$weights$recurrent[[i]] <- matrix(rnorm(ncol * ncol), nrow = ncol, ncol = ncol)
+            model$weights$recurrent[[i]] <- scale.weights(model$weights$recurrent[[i]], scale.method)
+        }
         model$biases[[i]]  <- rep(0, ncol)
         model$m.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
         model$m.biases[[i]]  <- rep(0, ncol)
@@ -20,10 +24,11 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         model$v.biases[[i]]  <- rep(0, ncol)
         if (recurrent && i > 1) model$neurons$a[[i]] <- rep(0, ncol) # Siraj initializes the hidden layer activations to 0.
     }
-    model$iteration <- 0
+    model$is.recurrent <- recurrent
     model$dropout <- dropout
     model$dropout.input <- dropout.input
     model$lambda <- lambda
+    model$iteration <- 0
 
     model
 }
@@ -116,6 +121,7 @@ forward.propagation <- function(input, model, dropout = TRUE) {
             weights <- model$weights[[i - 1]]
             if (!dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
             model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
+            if (model$is.recurrent) model$neurons$z[[i]] <- model$neurons$z[[i]] # + model$weights[[h-h]]
             model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
             if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
         }
