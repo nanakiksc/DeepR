@@ -2,11 +2,12 @@
 # TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
 
-init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
+init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', recurrent = FALSE, dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
 
     model <- list(weights = list(), biases = list())
     model <- choose.neuron(model, neuron.type)
+    model <- choose.task(model, task.type)
     for (i in 1:(length(layers) - 1)) {
         nrow <- layers[i]
         ncol <- layers[i + 1]
@@ -17,6 +18,7 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         model$m.biases[[i]]  <- rep(0, ncol)
         model$v.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
         model$v.biases[[i]]  <- rep(0, ncol)
+        if (recurrent && i > 1) model$neurons$a[[i]] <- rep(0, ncol) # Siraj initializes the hidden layer activations to 0.
     }
     model$iteration <- 0
     model$dropout <- dropout
@@ -60,13 +62,13 @@ test <- function(model, input, labels) {
 }
 
 choose.neuron <- function(model, neuron.type) {
-    if (neuron.type == 'ReLU') {
+    if (compare.words('ReLU', neuron.type)) {
         model$activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] <- 0.
         model$gradient   <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
-    } else if (neuron.type == 'sigmoid') {
+    } else if (compare.words('sigmoid', neuron.type)) {
         model$activation <- function(z) 1 / (1 + exp(-z))
         model$gradient   <- function(z) { s <- activation(z); s * (1 - s) }
-    } else if (neuron.type == 'tanh') {
+    } else if (compare.words('tanh', neuron.type)) {
         model$activation <- function(z) tanh(z)
         model$gradient   <- function(z) 1 - tanh(z)^2
     } else {
@@ -77,11 +79,31 @@ choose.neuron <- function(model, neuron.type) {
     model
 }
 
+choose.task <- function(model, task.type) {
+    if (compare.words('regression', task.type)) {
+        model$hypothesis <- function(model) model$neurons$z[[length(model$neurons$z)]] # Linear activation.
+        model$loss       <- function(labels, hypothesis) mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
+    } else if (compare.words('sigmoid.classification', task.type)) {
+        model$hypothesis <- function(model) 1 / (1 + exp(-model$neurons$z[[length(model$neurons$z)]])) # Sigmoid activation.
+        model$loss       <- function(labels, hypothesis) mean(Vectorize(function(l, h) if (l) -log(h) else -log(1 - h))(labels, hypothesis)) # Cross-entropy (logistic) loss.
+    } else if (compare.words('tanh.classification', task.type)) {
+        model$hypothesis <- function(model) tanh(model$neurons$z[[length(model$neurons$z)]]) # Hyperbolic tangent activation.
+        model$loss       <- function(labels, hypothesis) mean(Vectorize(function(l, h) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(labels, hypothesis)) # Cross-entropy (tanh) loss.
+    } else {
+        print('Unknown loss function. Please choose regression, sigmoid.classification, or tanh.classification.')
+        stop()
+    }
+
+    model
+}
+
+compare.words <- function(x, y) { w <- tolower(c(x, y)); substr(w[1], 1, nchar(w[2])) == w[2] } # Compare the beginning.
+
 scale.weights <- function (weights, scale.method = 'He') {
-    if      (scale.method == 'He')     weights * sqrt(2 / nrow(weights)) # He et al. adjusted initialization for deep ReLU networks.
-    else if (scale.method == 'Xavier') weights * sqrt(2 / sum(dim(weights))) # Xavier initializarion for deep networks.
-    else if (scale.method == 'Caffe')  weights * sqrt(nrow(weights)) # Caffe version of Xavier initialization.
-    else if (scale.method == 'none')   weights # Like... no scaling. Why would you do that, right?
+    if      (compare.words('He',     scale.method)) weights * sqrt(2 / nrow(weights)) # He et al. adjusted initialization for deep ReLU networks.
+    else if (compare.words('Xavier', scale.method)) weights * sqrt(2 / sum(dim(weights))) # Xavier initializarion for deep networks.
+    else if (compare.words('Caffe',  scale.method)) weights * sqrt(nrow(weights)) # Caffe version of Xavier initialization.
+    else if (compare.words('none',   scale.method)) weights # Like... no scaling. Why would you do that, right?
     else { print('Unknown wheight initialization method. Please choose He, Xavier, Caffe or none.'); stop() }
 }
 
@@ -102,6 +124,7 @@ forward.propagation <- function(input, model, dropout = TRUE) {
     weights <- model$weights[[n.weights]]
     if (!dropout) weights <- weights * model$dropout
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
+    model$neurons$a[[n.weights + 1]] <- model$activation(model$neurons$z[[n.weights + 1]])
 
     model
 }
