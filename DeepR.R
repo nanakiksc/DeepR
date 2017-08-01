@@ -72,6 +72,9 @@ choose.neuron <- function(model, neuron.type) {
     } else if (compare.words('tanh', neuron.type)) {
         model$activation <- function(z) tanh(z)
         model$gradient   <- function(z) 1 - tanh(z)^2
+    } else if (compare.words('softsign', neuron.type)) {
+        model$activation <- function(z) z / (1 + abs(z))
+        model$gradient   <- function(z) 1 / (1 + abs(z))^2
     } else {
         print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
         stop()
