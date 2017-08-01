@@ -1,8 +1,7 @@
-# TODO: Customize last.layer(): define it as part of the model (and therefore test()).
 # TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
 
-init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', recurrent = FALSE, dropout = 0.5, dropout.input = 0.8, lambda = 0) {
+init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'softmax', recurrent = FALSE, dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
 
     model <- list(weights = list(), biases = list())
@@ -43,7 +42,6 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
     for (i in 1:n.iter) {
         idx <- sample(nrow(input), batch.size)
         model <- forward.propagation(model, input[idx, ])
-        # last.deltas <- last.layer(model, labels[idx, ])$d
         model <- backpropagation(model, labels[idx, ])
         model <- update.model(model, alpha, beta1, beta2, epsilon)
     }
@@ -55,11 +53,7 @@ test <- function(model, input, labels) {
     labels <- as.matrix(labels)
 
     model <- forward.propagation(model, input, dropout = FALSE)
-    # hypothesis <- last.layer(model, labels)$h
     hypothesis <- model$neurons$a[[length(model$neurons$a)]] # Already computed in forward propagation.
-    # loss <- mean((hypothesis - labels)^2) / 2 # MSE (regression) loss.
-    # loss <- mean(Vectorize(function(l, h) if (l) -log(h) else -log(1 - h))(labels, hypothesis)) # Cross-entropy (logistic) loss.
-    # loss <- mean(Vectorize(function(l, h) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(labels, hypothesis)) # Cross-entropy (tanh) loss.
     loss <- model$loss(hypothesis, labels)
     loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
 
@@ -87,19 +81,26 @@ choose.neuron <- function(model, neuron.type) {
 }
 
 choose.task <- function(model, task.type) {
-    # TODO: Add softmax.
+    # The hypothesis function is the last layer activation,
+    # while the loss function is only used when testing the predictions (not for computing the error during backpropagation).
+    # Since both cross-entropy and quadratic loss functions have the same derivative, it is hardcoded in backpropagation().
+    # TODO: Allow for different (composite) last-layer activations.
     if (compare.words('regression', task.type)) {
         model$task.type  <- 'regression'
         model$hypothesis <- function(model) model$neurons$z[[length(model$neurons$z)]] # Linear activation.
         model$loss       <- function(h, l) mean((h - l)^2) / 2 # MSE (regression) loss.
+    } else if (compare.words('softmax', task.type)) {
+        model$task.type  <- 'softmax'
+        model$hypothesis <- function(model) e <- exp(model$neurons$z[[length(model$neurons$z)]]); e / sum(e) # Softmax activation.
+        model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l) -log(h) else -log(1 - h))(h, l)) # Cross-entropy loss. TODO: test.
     } else if (compare.words('sigmoid.classification', task.type)) {
         model$task.type  <- 'sigmoid.classification'
         model$hypothesis <- function(model) 1 / (1 + exp(-model$neurons$z[[length(model$neurons$z)]])) # Sigmoid activation.
-        model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l) -log(h) else -log(1 - h))(h, l)) # Cross-entropy (logistic) loss.
+        model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l) -log(h) else -log(1 - h))(h, l)) # Cross-entropy loss.
     } else if (compare.words('tanh.classification', task.type)) {
         model$task.type  <- 'tanh.classification'
         model$hypothesis <- function(model) tanh(model$neurons$z[[length(model$neurons$z)]]) # Hyperbolic tangent activation.
-        model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(h, l)) # Cross-entropy (tanh) loss.
+        model$loss       <- function(h, l) mean(Vectorize(function(h, l) if (l == 1) -log((h + 1) / 2) else -log(1 - (h + 1) / 2))(h, l)) # Cross-entropy (tanh) loss (just remap tanh domain to logistic domain before calculating the cross-entropy).
     } else if (compare.words('none', task.type)) {
         print('Remember to specify a hypothesis (activation) function for the last layer and a loss function.')
     } else {
@@ -134,7 +135,7 @@ forward.propagation <- function(model, input, dropout = TRUE) {
             if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
         }
     }
-     # Last layer always contains all neurons (no dropout).
+    # Last layer always contains all neurons (no dropout).
     weights <- model$weights[[n.weights]]
     if (!dropout) weights <- weights * model$dropout
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
@@ -151,19 +152,9 @@ dropout.mask <- function(model, layer) {
     model$neurons$a[[layer]] * mask
 }
 
-# last.layer <- function(model, labels) {
-#     # Compute last layer activations (hypothesis). It must return its deltas.
-#     # hypothesis <- model$neurons$z[[length(model$neurons$z)]] # Linear activation.
-#     hypothesis <- 1 / (1 + exp(-model$neurons$z[[length(model$neurons$z)]])) # Sigmoid activation.
-#     # hypothesis <- tanh(model$neurons$z[[length(model$neurons$z)]]) # Hyperbolic tangent activation.
-#     list(h = hypothesis, d = hypothesis - labels)
-# }
-
 backpropagation <- function(model, labels) {
-    # compute last deltas from last activations (hypothesis)
     n.layers <- length(model$weights) + 1
-    # model$deltas[[n.layers]] <- last.deltas
-    model$deltas[[n.layers]] <- model$neurons$a[[n.layers]] - labels
+    model$deltas[[n.layers]] <- model$neurons$a[[n.layers]] - labels # Compute last deltas from last activations (hypothesis).
     if (n.layers == 2) return(model)
     for (i in (n.layers - 1):2) {
         model$deltas[[i]] <- tcrossprod(model$deltas[[i + 1]], as.matrix(model$weights[[i]])) * model$gradient(model$neurons$z[[i]])
