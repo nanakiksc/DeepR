@@ -3,6 +3,8 @@
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'softmax', recurrent = FALSE, dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
+    if ( compare.words('ReLU', neuron.type) & !compare.words('He', scale.method))     print('Maybe you should consider He initialization when using ReLU neurons.')
+    if (!compare.words('ReLU', neuron.type) & !compare.words('Xavier', scale.method)) print('Maybe you should consider Xavier initialization when using non-ReLU neurons.')
 
     model <- list(weights = list(), biases = list())
     model <- choose.neuron(model, neuron.type)
