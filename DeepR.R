@@ -1,8 +1,9 @@
 # TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
-# TODO: Study what to do with the weight initialization whe using dropout (should it scale down the numer of "effective" neurons with the dropout factor?).
-# TODO: Add RNN stuff in backpropagation and update functions.
-init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'softmax', recurrent = FALSE, dropout = 0.5, dropout.input = 0.8, lambda = 0) {
+# TODO: Study what to do with the weight initialization when using dropout (should it scale down the numer of "effective" neurons with the dropout factor?).
+# TODO: Use Nelder-Mead for hyperparameter tuning. Default Nelder-Mead parameters should work.
+
+init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
     if ( compare.words('ReLU', neuron.type) & !compare.words('He', scale.method))     print('Maybe you should consider He initialization when using ReLU neurons.')
     if (!compare.words('ReLU', neuron.type) & !compare.words('Xavier', scale.method)) print('Maybe you should consider Xavier initialization when using non-ReLU neurons.')
@@ -20,18 +21,7 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
         model$m.biases[[i]]  <- rep(0, ncol)
         model$v.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
         model$v.biases[[i]]  <- rep(0, ncol)
-        if (recurrent && i < length(layers) - 1) {
-            model$recurrent.weights[[i]] <- matrix(rnorm(ncol * ncol), nrow = ncol, ncol = ncol)
-            model$recurrent.weights[[i]] <- scale.weights(model$recurrent.weights[[i]], scale.method)
-            model$recurrent.biases[[i]]  <- rep(0, ncol)
-            model$recurrent.m.weights[[i]] <- matrix(0, nrow = ncol, ncol = ncol)
-            model$recurrent.m.biases[[i]]  <- rep(0, ncol)
-            model$recurrent.v.weights[[i]] <- matrix(0, nrow = ncol, ncol = ncol)
-            model$recurrent.v.biases[[i]]  <- rep(0, ncol)
-        }
-        if (recurrent && i > 1) model$neurons$a[[i]] <- rep(0, ncol) # Karpathy and Siraj initialize the hidden layer activations to 0.
     }
-    model$is.recurrent <- recurrent
     model$dropout <- dropout
     model$dropout.input <- dropout.input
     model$lambda <- lambda
@@ -40,7 +30,7 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
     model
 }
 
-train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, batch.size = nrow(input)) {
+train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, batch.size = nrow(as.matrix(input))) {
     input <- scale(as.matrix(input))
     attr(model, 'scaled:center') <- attr(input, 'scaled:center')
     attr(model, 'scaled:scale') <- attr(input, 'scaled:scale')
@@ -142,15 +132,11 @@ forward.propagation <- function(model, input, dropout = TRUE) {
             weights <- model$weights[[i - 1]]
             if (!dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
             model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
-            if (model$is.recurrent) {
-                # Add hidden state to the current activations through recurrent weights.
-                model$neurons$z[[i]] <- model$neurons$z[[i]] + sweep(model$neurons$a[[i]] %*% model$recurrent.weights[[i - 1]], 2, model$recurrent.biases[[i - 1]], '+')
-            }
             model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
             if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
         }
     }
-    # Last layer always contains all neurons (no dropout). Does not contain recurrent weights as it is not a hidden layer.
+    # Last layer always contains all neurons (no dropout).
     weights <- model$weights[[n.weights]]
     if (!dropout) weights <- weights * model$dropout
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
