@@ -60,6 +60,13 @@ test <- function(model, input, labels) {
     list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
 
+predict <- function(model, input) {
+    input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
+
+    model <- forward.propagation(model, input, dropout = FALSE)
+    model$neurons$a[[length(model$neurons$a)]] # Already computed in forward propagation.
+}
+
 choose.neuron <- function(model, neuron.type) {
     if (compare.words('ReLU', neuron.type)) {
         model$activation <- function(z) (abs(z) + z) / 2 # Faster than pmax(0, z) or z[z < 0] <- 0.

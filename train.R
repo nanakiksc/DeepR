@@ -29,9 +29,9 @@ for (i in 1:n.samples) {
     depth <- sample(depth.vec, 1)
 
     layers <- c(ncol(input), rep(breadth, depth), ncol(labels))
-    model <- init.model(layers)
-    model <- train(model, train.set, train.labels, n.iter, alpha, mu, lambda)
-    cv <- test(model, test.set, test.labels, lambda)
+    model <- init.model(layers, lambda)
+    model <- train(model, train.set, train.labels, n.iter, alpha, mu)
+    cv <- test(model, test.set, test.labels)
     cv.results <- rbind(cv.results, c(log10(n.iter), log10(alpha), mu, log10(lambda), log2(breadth / ncol(input)), depth, cv$loss, cv$accuracy))
 }
 names(cv.results) <- c('n.iter', 'alpha', 'mu', 'lambda', 'breadth', 'depth', 'loss', 'accuracy')
