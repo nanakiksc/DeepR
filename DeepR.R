@@ -1,6 +1,6 @@
 # TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
-# TODO: Study what to do with the weight initialization when using dropout (should it scale down the numer of "effective" neurons with the dropout factor?).
+# TODO: Study what to do with the weight initialization when using dropout (should it scale down the numer of "effective" neurons by the dropout factor?).
 # TODO: Use Nelder-Mead for hyperparameter tuning. Default Nelder-Mead parameters should work.
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
@@ -81,7 +81,7 @@ choose.neuron <- function(model, neuron.type) {
         model$activation <- function(z) z / (1 + abs(z))
         model$gradient   <- function(z) 1 / (1 + abs(z))^2
     } else {
-        print('Unknown activation function. Please choose ReLU, sigmoid or tanh.')
+        print('Unknown activation function. Please choose ReLU, sigmoid, tanh or softsign.')
         stop()
     }
 
@@ -112,7 +112,7 @@ choose.task <- function(model, task.type) {
     } else if (compare.words('none', task.type)) {
         print('Remember to specify a hypothesis (activation) function for the last layer and a loss function.')
     } else {
-        print('Unknown loss function. Please choose regression, sigmoid.classification, tanh.classification or none.')
+        print('Unknown loss function. Please choose regression, softmax, sigmoid.classification, tanh.classification or none.')
         stop()
     }
 
@@ -127,7 +127,7 @@ scale.weights <- function (weights, scale.method = 'He') {
     else if (compare.words('Xavier', scale.method)) weights * sqrt(2 / sum(dim(weights))) # Xavier initializarion for deep networks.
     else if (compare.words('Caffe',  scale.method)) weights * sqrt(nrow(weights)) # Caffe version of Xavier initialization.
     else if (compare.words('none',   scale.method)) weights # Like... no scaling. Why would you do that, right?
-    else { print('Unknown wheight initialization method. Please choose He, Xavier, Caffe or none.'); stop() }
+    else { print('Unknown weight initialization method. Please choose He, Xavier, Caffe or none.'); stop() }
 }
 
 forward.propagation <- function(model, input, dropout = TRUE) {
