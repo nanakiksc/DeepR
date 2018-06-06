@@ -1,9 +1,9 @@
 # TODO: Add Nesterov momentum to Adam (Nadam).
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
-# TODO: Study what to do with the weight initialization when using dropout (should it scale down the numer of "effective" neurons by the dropout factor?).
+# TODO: Study what happens when correcting weight initialization for dropout (scaling by the numer of "effective" neurons).
 # TODO: Use Nelder-Mead for hyperparameter tuning. Default Nelder-Mead parameters should work.
 
-init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', dropout = 0.5, dropout.input = 0.8, lambda = 0) {
+init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', dropout = 0.5, dropout.input = 0.8, dropout.scaling = TRUE, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
     if ( compare.words('ReLU', neuron.type) & !compare.words('He', scale.method))     print('Maybe you should consider He initialization when using ReLU neurons.')
     if (!compare.words('ReLU', neuron.type) & !compare.words('Xavier', scale.method)) print('Maybe you should consider Xavier initialization when using non-ReLU neurons.')
@@ -14,8 +14,9 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
     for (i in 1:(length(layers) - 1)) {
         nrow <- layers[i]
         ncol <- layers[i + 1]
+        dropout.factor <- if (dropout.scaling) { if (i == 1) c(dropout.input, dropout) else dropout } else 1
         model$weights[[i]] <- matrix(rnorm(nrow * ncol), nrow = nrow, ncol = ncol)
-        model$weights[[i]] <- scale.weights(model$weights[[i]], scale.method)
+        model$weights[[i]] <- scale.weights(model$weights[[i]], scale.method, dropout.factor)
         model$biases[[i]]  <- rep(0, ncol)
         model$m.weights[[i]] <- matrix(0, nrow = nrow, ncol = ncol)
         model$m.biases[[i]]  <- rep(0, ncol)
@@ -121,11 +122,11 @@ choose.task <- function(model, task.type) {
 
 compare.words <- function(x, y) { w <- tolower(c(x, y)); substr(w[1], 1, nchar(w[2])) == w[2] } # Compare the beginning.
 
-scale.weights <- function (weights, scale.method = 'He') {
+scale.weights <- function (weights, scale.method = 'He', dropout.factor = 1) { # TODO: test dropout factor corrections.
     # Note that this version of Xavier initialization adjustes the variance of a normal distribution, it doesn't sample from a uniform.
-    if      (compare.words('He',     scale.method)) weights * sqrt(2 / nrow(weights)) # He et al. adjusted initialization for deep ReLU networks.
-    else if (compare.words('Xavier', scale.method)) weights * sqrt(2 / sum(dim(weights))) # Xavier initializarion for deep networks.
-    else if (compare.words('Caffe',  scale.method)) weights * sqrt(nrow(weights)) # Caffe version of Xavier initialization.
+    if      (compare.words('He',     scale.method)) weights * sqrt(2 / nrow(weights) / dropout.factor[1]) # He et al. adjusted initialization for deep ReLU networks.
+    else if (compare.words('Xavier', scale.method)) weights * sqrt(2 / sum(dim(weights) * dropout.factor)) # Xavier initializarion for deep networks.
+    else if (compare.words('Caffe',  scale.method)) weights * sqrt(nrow(weights) * dropout.factor[1]) # Caffe version of Xavier initialization.
     else if (compare.words('none',   scale.method)) weights # Like... no scaling. Why would you do that, right?
     else { print('Unknown weight initialization method. Please choose He, Xavier, Caffe or none.'); stop() }
 }
