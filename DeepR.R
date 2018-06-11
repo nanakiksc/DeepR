@@ -1,7 +1,7 @@
-# TODO: Add Nesterov momentum to Adam (Nadam).
+# TODO: Study how AMSGrad could go with Nesterov momentum.
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
-# TODO: Study what happens when correcting weight initialization for dropout (scaling by the numer of "effective" neurons).
-# TODO: Use Nelder-Mead for hyperparameter tuning. Default Nelder-Mead parameters should work.
+# TODO: Test dropout-corrected weight initialization (scaling by the numer of "effective" neurons).
+# TODO: Make Nelder-Mead wrapper for hyperparameter tuning. Default Nelder-Mead parameters should work.
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', dropout = 0.5, dropout.input = 0.8, dropout.scaling = TRUE, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
@@ -47,14 +47,16 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
     model
 }
 
-test <- function(model, input, labels) {
+test <- function(model, input, labels, use.lambda = TRUE) {
     input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
     labels <- as.matrix(labels)
 
-    model <- forward.propagation(model, input, dropout = FALSE)
+    model <- forward.propagation(model, input, use.dropout = FALSE)
     hypothesis <- model$neurons$a[[length(model$neurons$a)]] # Already computed in forward propagation.
     loss <- model$loss(hypothesis, labels)
-    loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
+    if (use.lambda) { # Optionally omit L2 regularization for plotting loss.
+       loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
+    }
 
     accuracy <- NA
     if (model$task.type != 'regression') accuracy <- mean(apply(round(hypothesis) == labels, 1, all))
@@ -64,7 +66,7 @@ test <- function(model, input, labels) {
 predict <- function(model, input) {
     input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
 
-    model <- forward.propagation(model, input, dropout = FALSE)
+    model <- forward.propagation(model, input, use.dropout = FALSE)
     model$neurons$a[[length(model$neurons$a)]] # Already computed in forward propagation.
 }
 
@@ -131,22 +133,22 @@ scale.weights <- function (weights, scale.method = 'He', dropout.factor = 1) { #
     else { print('Unknown weight initialization method. Please choose He, Xavier, Caffe or none.'); stop() }
 }
 
-forward.propagation <- function(model, input, dropout = TRUE) {
+forward.propagation <- function(model, input, use.dropout = TRUE) {
     model$neurons$a[[1]] <- input
-    if (dropout) model$neurons$a[[1]] <- dropout.mask(model, 1)
+    if (use.dropout) model$neurons$a[[1]] <- dropout.mask(model, 1)
     n.weights <- length(model$weights)
     if (n.weights > 1) {
         for (i in 2:n.weights) {
             weights <- model$weights[[i - 1]]
-            if (!dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
+            if (!use.dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
             model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
             model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
-            if (dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
+            if (use.dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
         }
     }
     # Last layer always contains all neurons (no dropout).
     weights <- model$weights[[n.weights]]
-    if (!dropout) weights <- weights * model$dropout
+    if (!use.dropout) weights <- weights * model$dropout
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
     model$neurons$a[[n.weights + 1]] <- model$hypothesis(model)
 
@@ -178,13 +180,14 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
         model$weights.grad[[i]] <- crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + model$lambda * model$weights[[i]] # Add L2 regularization term.
         model$biases.grad[[i]]  <- colSums(model$deltas[[i + 1]])
 
-        # Adam update.
+        # AMSGrad update (fixed version of Adam).
         model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * model$weights.grad[[i]]
         model$m.biases[[i]]  <- beta1 * model$m.biases[[i]]  + (1 - beta1) * model$biases.grad[[i]]
-        model$v.weights[[i]] <- beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2
-        model$v.biases[[i]]  <- beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2
+        model$v.weights[[i]] <- pmax(v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
+        model$v.biases[[i]]  <- pmax(v.weights[[i]], beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
 
-        alpha.t <- alpha * sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration)
+        alpha.t <- alpha / sqrt(model$iteration)
+        alpha.t <- alpha.t * sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction.
         model$weights[[i]] <- model$weights[[i]] - alpha.t * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
         model$biases[[i]]  <- model$biases[[i]]  - alpha.t * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
     }
