@@ -1,3 +1,4 @@
+# TODO: Try AdaMax instead of Adam. Removes epsilon and the need for bias correction in the beta2 term.
 # TODO: Study how AMSGrad could go with Nesterov momentum.
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
 # TODO: Test dropout-corrected weight initialization (scaling by the numer of "effective" neurons).
@@ -177,19 +178,20 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
     model$iteration <- model$iteration + 1
     for (i in 1:length(model$weights)) {
         # Compute gradients.
-        model$weights.grad[[i]] <- crossprod(model$neurons$a[[i]], model$deltas[[i + 1]]) + model$lambda * model$weights[[i]] # Add L2 regularization term.
-        model$biases.grad[[i]]  <- colSums(model$deltas[[i + 1]])
+        model$weights.grad[[i]] <- crossprod(model$neurons$a[[i]], model$deltas[[i + 1]])
+        if (model$lambda) model$weights.grad[[i]] <- model$weights.grad[[i]] + model$lambda * model$weights[[i]] # Add L2 regularization term.
+        model$biases.grad[[i]] <- colSums(model$deltas[[i + 1]])
 
-        # AMSGrad update (fixed version of Adam).
+        # AMSGrad update.
         model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * model$weights.grad[[i]]
         model$m.biases[[i]]  <- beta1 * model$m.biases[[i]]  + (1 - beta1) * model$biases.grad[[i]]
-        model$v.weights[[i]] <- pmax(v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
-        model$v.biases[[i]]  <- pmax(v.weights[[i]], beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
+        model$v.weights[[i]] <- pmax(model$v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
+        model$v.biases[[i]]  <- pmax(model$v.weights[[i]], beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
 
-        alpha.t <- alpha / sqrt(model$iteration)
-        alpha.t <- alpha.t * sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction.
-        model$weights[[i]] <- model$weights[[i]] - alpha.t * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
-        model$biases[[i]]  <- model$biases[[i]]  - alpha.t * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
+        alpha.t <- alpha #/ sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
+        bc <- sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction factor.
+        model$weights[[i]] <- model$weights[[i]] - alpha.t * bc * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
+        model$biases[[i]]  <- model$biases[[i]]  - alpha.t * bc * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
     }
     model
 }
