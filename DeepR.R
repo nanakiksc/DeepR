@@ -186,7 +186,7 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
         model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * model$weights.grad[[i]]
         model$m.biases[[i]]  <- beta1 * model$m.biases[[i]]  + (1 - beta1) * model$biases.grad[[i]]
         model$v.weights[[i]] <- pmax(model$v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
-        model$v.biases[[i]]  <- pmax(model$v.weights[[i]], beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
+        model$v.biases[[i]]  <- pmax(model$v.biases[[i]],  beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
 
         alpha.t <- alpha #/ sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
         bc <- sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction factor.
