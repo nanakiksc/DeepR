@@ -1,4 +1,4 @@
-# TODO: Try AdaMax instead of Adam. Removes epsilon and the need for bias correction in the beta2 term.
+# TODO: Try AdaMax instead of Adam. Removes epsilon and the need for bias correction in the beta2 term (and the max operation looks similar to AMSGrad).
 # TODO: Study how AMSGrad could go with Nesterov momentum.
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
 # TODO: Test dropout-corrected weight initialization (scaling by the numer of "effective" neurons).
@@ -41,8 +41,8 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
 
     for (i in 1:n.iter) {
         idx <- sample(nrow(input), batch.size)
-        model <- forward.propagation(model, input[idx, ])
-        model <- backpropagation(model, labels[idx, ])
+        model <- forward.propagation(model, input[idx, , drop = FALSE])
+        model <- backpropagation(model, labels[idx, , drop = FALSE])
         model <- update.model(model, alpha, beta1, beta2, epsilon)
     }
     model
@@ -183,12 +183,13 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
         model$biases.grad[[i]] <- colSums(model$deltas[[i + 1]])
 
         # AMSGrad update.
-        model$m.weights[[i]] <- beta1 * model$m.weights[[i]] + (1 - beta1) * model$weights.grad[[i]]
-        model$m.biases[[i]]  <- beta1 * model$m.biases[[i]]  + (1 - beta1) * model$biases.grad[[i]]
+        beta1.t <- beta1 * (1 - 1e-8)^(model$iteration - 1) # First moment running average coefficient decay.
+        model$m.weights[[i]] <- beta1.t * model$m.weights[[i]] + (1 - beta1.t) * model$weights.grad[[i]]
+        model$m.biases[[i]]  <- beta1.t * model$m.biases[[i]]  + (1 - beta1.t) * model$biases.grad[[i]]
         model$v.weights[[i]] <- pmax(model$v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
         model$v.biases[[i]]  <- pmax(model$v.biases[[i]],  beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
 
-        alpha.t <- alpha #/ sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
+        alpha.t <- alpha / sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
         bc <- sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction factor.
         model$weights[[i]] <- model$weights[[i]] - alpha.t * bc * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
         model$biases[[i]]  <- model$biases[[i]]  - alpha.t * bc * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
