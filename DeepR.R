@@ -140,18 +140,16 @@ forward.propagation <- function(model, input, use.dropout = TRUE) {
     n.weights <- length(model$weights)
     if (n.weights > 1) {
         for (i in 2:n.weights) {
-            weights <- model$weights[[i - 1]]
-            if (!use.dropout) weights <- weights * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout prob.
-            model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% weights, 2, model$biases[[i - 1]], '+')
+            model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
             model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
             if (use.dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
+            else model$neurons$a[[i]] <- model$neurons$a[[i]] * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout probability.
         }
     }
     # Last layer always contains all neurons (no dropout).
-    weights <- model$weights[[n.weights]]
-    if (!use.dropout) weights <- weights * model$dropout
-    model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% weights, 2, model$biases[[n.weights ]], '+')
+    model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
     model$neurons$a[[n.weights + 1]] <- model$hypothesis(model)
+    if (!use.dropout) model$neurons$a[[n.weights + 1]] <- model$neurons$a[[n.weights + 1]] * model$dropout
 
     model
 }
@@ -183,13 +181,13 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
         model$biases.grad[[i]] <- colSums(model$deltas[[i + 1]])
 
         # AMSGrad update.
-        beta1.t <- beta1 * (1 - 1e-8)^(model$iteration - 1) # First moment running average coefficient decay.
+        beta1.t <- beta1# * (1 - 1e-8)^(model$iteration - 1) # First moment running average coefficient decay.
         model$m.weights[[i]] <- beta1.t * model$m.weights[[i]] + (1 - beta1.t) * model$weights.grad[[i]]
         model$m.biases[[i]]  <- beta1.t * model$m.biases[[i]]  + (1 - beta1.t) * model$biases.grad[[i]]
         model$v.weights[[i]] <- pmax(model$v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
         model$v.biases[[i]]  <- pmax(model$v.biases[[i]],  beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
 
-        alpha.t <- alpha / sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
+        alpha.t <- alpha #/ sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
         bc <- sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction factor.
         model$weights[[i]] <- model$weights[[i]] - alpha.t * bc * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
         model$biases[[i]]  <- model$biases[[i]]  - alpha.t * bc * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
