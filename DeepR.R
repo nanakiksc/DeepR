@@ -49,11 +49,9 @@ train <- function(model, input, labels, n.iter = 1e3, alpha = 1e-3, beta1 = 0.9,
 }
 
 test <- function(model, input, labels, use.lambda = TRUE) {
-    input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
     labels <- as.matrix(labels)
 
-    model <- forward.propagation(model, input, use.dropout = FALSE)
-    hypothesis <- model$neurons$a[[length(model$neurons$a)]] # Already computed in forward propagation.
+    hypothesis <- predict(model, input)
     loss <- model$loss(hypothesis, labels)
     if (use.lambda) { # Optionally omit L2 regularization for plotting loss.
        loss <- loss + model$lambda * sum(unlist(model$weights)^2) / (2 * nrow(model$neurons$z[[length(model$neurons$z)]])) # Add L2 regularization term.
