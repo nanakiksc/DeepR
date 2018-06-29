@@ -137,19 +137,19 @@ scale.weights <- function (weights, scale.method = 'He', dropout.factor = 1) { #
 forward.propagation <- function(model, input, use.dropout = TRUE) {
     model$neurons$a[[1]] <- input
     if (use.dropout) model$neurons$a[[1]] <- dropout.mask(model, 1)
+    else model$neurons$a[[1]] <- model$neurons$a[[1]] * model$dropout.input
     n.weights <- length(model$weights)
     if (n.weights > 1) {
         for (i in 2:n.weights) {
             model$neurons$z[[i]] <- sweep(model$neurons$a[[i - 1]] %*% model$weights[[i - 1]], 2, model$biases[[i - 1]], '+')
             model$neurons$a[[i]] <- model$activation(model$neurons$z[[i]])
             if (use.dropout) model$neurons$a[[i]] <- dropout.mask(model, i)
-            else model$neurons$a[[i]] <- model$neurons$a[[i]] * if (i == 2) model$dropout.input else model$dropout # Input layer has different dropout probability.
+            else model$neurons$a[[i]] <- model$neurons$a[[i]] * model$dropout
         }
     }
     # Last layer always contains all neurons (no dropout).
     model$neurons$z[[n.weights + 1]] <- sweep(model$neurons$a[[n.weights]] %*% model$weights[[n.weights]], 2, model$biases[[n.weights ]], '+')
     model$neurons$a[[n.weights + 1]] <- model$hypothesis(model)
-    if (!use.dropout) model$neurons$a[[n.weights + 1]] <- model$neurons$a[[n.weights + 1]] * model$dropout
 
     model
 }
