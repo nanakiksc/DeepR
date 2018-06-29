@@ -9,7 +9,7 @@ init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method =
     if ( compare.words('ReLU', neuron.type) & !compare.words('He', scale.method))     print('Maybe you should consider He initialization when using ReLU neurons.')
     if (!compare.words('ReLU', neuron.type) & !compare.words('Xavier', scale.method)) print('Maybe you should consider Xavier initialization when using non-ReLU neurons.')
 
-    model <- list(weights = list(), biases = list())
+    model <- structure(list(weights = list(), biases = list()), class = 'deepr')
     model <- choose.neuron(model, neuron.type)
     model <- choose.task(model, task.type)
     for (i in 1:(length(layers) - 1)) {
@@ -62,7 +62,7 @@ test <- function(model, input, labels, use.lambda = TRUE) {
     list(hypothesis = hypothesis, loss = loss, accuracy = accuracy)
 }
 
-predict <- function(model, input) {
+predict.deepr <- function(model, input) {
     input <- scale(as.matrix(input), center = attr(model, 'scaled:center'), scale = attr(model, 'scaled:scale'))
 
     model <- forward.propagation(model, input, use.dropout = FALSE)
