@@ -3,6 +3,7 @@
 # TODO: Maybe substitute plain dropout by multiplicative Gaussian noise.
 # TODO: Test dropout-corrected weight initialization (scaling by the numer of "effective" neurons).
 # TODO: Make Nelder-Mead wrapper for hyperparameter tuning. Default Nelder-Mead parameters should work.
+# TODO: Change compare.words function to match.args interface.
 
 init.model <- function(layers, seed = NULL, neuron.type = 'ReLU', scale.method = 'He', task.type = 'sigmoid.classification', dropout = 0.5, dropout.input = 0.8, dropout.scaling = TRUE, lambda = 0) {
     if (!is.null(seed)) set.seed(seed)
@@ -75,7 +76,7 @@ choose.neuron <- function(model, neuron.type) {
         model$gradient   <- function(z) z > 0 # Faster than ifelse(z > 0, 1, 0).
     } else if (compare.words('sigmoid', neuron.type)) {
         model$activation <- function(z) 1 / (1 + exp(-z))
-        model$gradient   <- function(z) { s <- activation(z); s * (1 - s) }
+        model$gradient   <- function(z) { s <- model$activation(z); s * (1 - s) }
     } else if (compare.words('tanh', neuron.type)) {
         model$activation <- function(z) tanh(z)
         model$gradient   <- function(z) 1 - tanh(z)^2
@@ -179,16 +180,23 @@ update.model <- function(model, alpha = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilo
         model$biases.grad[[i]] <- colSums(model$deltas[[i + 1]])
 
         # AMSGrad update.
-        beta1.t <- beta1# * (1 - 1e-8)^(model$iteration - 1) # First moment running average coefficient decay.
+        beta1.t <- beta1 * (1 - 1e-8)^(model$iteration - 1) # First moment running average coefficient decay.
         model$m.weights[[i]] <- beta1.t * model$m.weights[[i]] + (1 - beta1.t) * model$weights.grad[[i]]
         model$m.biases[[i]]  <- beta1.t * model$m.biases[[i]]  + (1 - beta1.t) * model$biases.grad[[i]]
         model$v.weights[[i]] <- pmax(model$v.weights[[i]], beta2 * model$v.weights[[i]] + (1 - beta2) * model$weights.grad[[i]]^2)
         model$v.biases[[i]]  <- pmax(model$v.biases[[i]],  beta2 * model$v.biases[[i]]  + (1 - beta2) * model$biases.grad[[i]]^2)
 
-        alpha.t <- alpha #/ sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
+        alpha.t <- alpha / sqrt(model$iteration) # Stepsize annealing schedule. TODO: implement Vaswani et al. (2017) schedule.
         bc <- sqrt(1 - beta2^model$iteration) / (1 - beta1^model$iteration) # Initialization bias correction factor.
         model$weights[[i]] <- model$weights[[i]] - alpha.t * bc * model$m.weights[[i]] / (sqrt(model$v.weights[[i]]) + epsilon)
         model$biases[[i]]  <- model$biases[[i]]  - alpha.t * bc * model$m.biases[[i]]  / (sqrt(model$v.biases[[i]])  + epsilon)
+
+        # Parameter averaging.
+        # Define temporary weights/biases in the previous two lines.
+        # model$weights[[i]] <- beta2 * model$weights[[i]] + (1 - beta2) * weights
+        # model$biases[[i]] <- beta2 * model$biases[[i]] + (1 - beta2) * biases
+        # Initialization bias correction may not be needed for weights since they are not initialized at 0.
+        # model$biases[[i]] <- model$biases[[i]] / (1 - beta2^model$iteration)
     }
     model
 }
